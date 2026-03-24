@@ -6,6 +6,24 @@ const validate = require('../middleware/validate');
 // GET /api/products - public browse with optional filters
 // Query params: category, minPrice, maxPrice, seller (farmer name), available (default true)
 router.get('/', (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+  const offset = (page - 1) * limit;
+
+  const total = db.prepare('SELECT COUNT(*) as count FROM products WHERE quantity > 0').get().count;
+  const products = db.prepare(`
+    SELECT p.*, u.name as farmer_name
+    FROM products p
+    JOIN users u ON p.farmer_id = u.id
+    WHERE p.quantity > 0
+    ORDER BY p.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(limit, offset);
+
+  res.json({
+    data: products,
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+  });
   const { category, minPrice, maxPrice, seller, available = 'true' } = req.query;
 
   let sql = `SELECT p.*, u.name as farmer_name FROM products p JOIN users u ON p.farmer_id = u.id WHERE 1=1`;
