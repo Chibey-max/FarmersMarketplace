@@ -23,6 +23,21 @@ async function refreshAccessToken() {
   return accessToken;
 }
 
+async function request(path, options = {}) {
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        ...options.headers,
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch {
+    throw new Error('Failed to fetch');
+  }
 async function request(path, options = {}, retry = true) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
