@@ -30,7 +30,7 @@ export default function Wallet() {
   const [loadError, setLoadError] = useState(null);
 
   // Send form state
-  const [sendForm, setSendForm] = useState({ destination: '', amount: '', memo: '' });
+  const [sendForm, setSendForm] = useState({ destination: '', amount: '', currency: 'XLM', memo: '' });
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState(null);
 
@@ -68,6 +68,7 @@ export default function Wallet() {
     const amount = parseFloat(sendForm.amount);
     if (!sendForm.destination.trim()) return setSendMsg({ type: 'err', text: 'Destination address is required.' });
     if (!/^G[A-Z2-7]{55}$/.test(sendForm.destination.trim())) return setSendMsg({ type: 'err', text: 'Invalid Stellar public key.' });
+    if (sendForm.currency !== 'XLM') return setSendMsg({ type: 'err', text: `"${sendForm.currency}" is not supported. This platform only supports XLM (Stellar Lumens). Other tokens and assets cannot be sent here.` });
     if (!amount || amount <= 0) return setSendMsg({ type: 'err', text: 'Amount must be greater than 0.' });
     if (sendForm.memo.length > 28) return setSendMsg({ type: 'err', text: 'Memo must be 28 characters or fewer.' });
 
@@ -79,7 +80,7 @@ export default function Wallet() {
         memo: sendForm.memo.trim() || undefined,
       });
       setSendMsg({ type: 'ok', text: `Sent ${res.amount} XLM`, txHash: res.txHash });
-      setSendForm({ destination: '', amount: '', memo: '' });
+      setSendForm({ destination: '', amount: '', currency: 'XLM', memo: '' });
       load();
     } catch (err) {
       setSendMsg({ type: 'err', text: err.message });
@@ -131,16 +132,38 @@ export default function Wallet() {
 
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={s.label}>Amount (XLM)</label>
-              <input
-                style={s.input}
-                type="number"
-                min="0.0000001"
-                step="any"
-                placeholder="0.00"
-                value={sendForm.amount}
-                onChange={e => setSendForm(f => ({ ...f, amount: e.target.value }))}
-              />
+              <label style={s.label}>Amount</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  style={{ ...s.input, flex: 1 }}
+                  type="number"
+                  min="0.0000001"
+                  step="any"
+                  placeholder="0.00"
+                  value={sendForm.amount}
+                  onChange={e => setSendForm(f => ({ ...f, amount: e.target.value }))}
+                />
+                <select
+                  style={{ padding: '9px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, background: '#f9f9f9', cursor: 'pointer', minWidth: 90 }}
+                  value={sendForm.currency}
+                  onChange={e => setSendForm(f => ({ ...f, currency: e.target.value }))}
+                  aria-label="Currency"
+                >
+                  <option value="XLM">XLM ✓</option>
+                  <option value="USDC">USDC</option>
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                  <option value="other">Other…</option>
+                </select>
+              </div>
+              {sendForm.currency !== 'XLM' && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#c0392b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  ⛔ Only <strong>XLM</strong> is supported. Select XLM to continue.
+                </div>
+              )}
+              {sendForm.currency === 'XLM' && (
+                <div style={{ marginTop: 5, fontSize: 11, color: '#888' }}>Only XLM (Stellar Lumens) is accepted on this platform.</div>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <label style={s.label}>Memo <span style={{ color: '#aaa', fontWeight: 400 }}>(optional, max 28 chars)</span></label>
