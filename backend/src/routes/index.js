@@ -5,16 +5,18 @@ const authLimiter  = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { e
 const orderLimiter = rateLimit({ windowMs: 60 * 1000,       max: 10, message: { error: 'Too many orders, slow down' } });
 const fundLimiter  = rateLimit({ windowMs: 60 * 60 * 1000,  max: 5,  message: { error: 'Funding limit reached, try again in an hour' } });
 
-router.use('/api/auth/login',    authLimiter);
-router.use('/api/auth/register', authLimiter);
-router.use('/api/orders',        orderLimiter);
-router.use('/api/wallet/fund',   fundLimiter);
+// Rate limiters scoped to versioned paths
+router.use('/api/v1/auth/login',    authLimiter);
+router.use('/api/v1/auth/register', authLimiter);
+router.use('/api/v1/orders',        orderLimiter);
+router.use('/api/v1/wallet/fund',   fundLimiter);
 
-router.use('/api/auth',     require('./auth'));
-router.use('/api/products', require('./products'));
-router.use('/api/orders',   require('./orders'));
-router.use('/api/wallet',   require('./wallet'));
+// Versioned routes under /api/v1
+router.use('/api/v1/auth',     require('./auth'));
+router.use('/api/v1/products', require('./products'));
+router.use('/api/v1/orders',   require('./orders'));
+router.use('/api/v1/wallet',   require('./wallet'));
 
-router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' }));
 
 module.exports = router;
