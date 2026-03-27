@@ -12,6 +12,9 @@ export function clearAccessToken() {
 }
 
 // Reads the csrf_token cookie (not HttpOnly, so JS can read it)
+export function setAccessToken(token) { accessToken = token; }
+export function clearAccessToken()    { accessToken = null; }
+
 function getCsrfToken() {
   const match = document.cookie.split(';').find(c => c.trim().startsWith('csrf_token='));
   return match ? match.trim().split('=')[1] : null;
@@ -40,6 +43,7 @@ async function refreshAccessToken() {
 }
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const MUTATING    = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const CSRF_EXEMPT = ['/auth/login', '/auth/register'];
 
 async function request(path, options = {}, retry = true) {
@@ -51,12 +55,16 @@ async function request(path, options = {}, retry = true) {
   const csrfToken = needsCsrf ? getCsrfToken() : null;
 
   // If a FormData body is passed, let the browser set Content-Type (multipart boundary)
+  if (needsCsrf) await ensureCsrfToken();
+
+  const csrfToken  = needsCsrf ? getCsrfToken() : null;
   const isFormData = options.body instanceof FormData;
 
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  if (csrfToken)   headers['X-CSRF-Token']  = csrfToken;
   Object.assign(headers, options.headers || {});
 
   const res = await fetch(`${BASE}${path}`, {
@@ -151,4 +159,27 @@ export const api = {
   adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
   adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
   adminGetStats: () => request('/admin/stats'),
+  placeOrder: function(body, idempotencyKey) {
+    return request('/orders', {
+      method: 'POST',
+      body: body,
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}
+    });
+  },
+  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
+  getSales: function() { return request('/orders/sales'); },
+
+  getWallet: function() { return request('/wallet'); },
+  getTransactions: function() { return request('/wallet/transactions'); },
+  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
+
+  setStockAlert:    (productId) => request(`/products/${productId}/alert`,        { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`,        { method: 'DELETE' }),
+  getMyAlert:       (productId) => request(`/products/${productId}/alert/status`),
+  fundEscrow: (orderId) => request(`/orders/${orderId}/escrow`, { method: 'POST' }),
+  claimEscrow: (orderId) => request(`/orders/${orderId}/claim`, { method: 'POST' }),
+
+  setStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'DELETE' }),
+  getMyAlert: (productId) => request(`/products/${productId}/alert/status`),
 };

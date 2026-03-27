@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { body, validationResult } = require('express-validator');
 
 const WEAK_PASSWORDS = new Set([
   'password', 'password1', 'Password1', 'Password1!',
@@ -22,6 +23,15 @@ function validate(schema) {
     req.body = result.data; // use coerced/parsed values
     next();
   };
+}
+
+// express-validator error handler middleware
+function handle(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: errors.array()[0].msg, code: 'validation_error' });
+  }
+  next();
 }
 
 const schemas = {
