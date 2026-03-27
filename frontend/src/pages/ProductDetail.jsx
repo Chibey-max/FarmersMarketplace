@@ -48,6 +48,8 @@ export default function ProductDetail() {
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState('');
   const [useEscrow, setUseEscrow] = useState(false);
+  const [alertSet, setAlertSet] = useState(false);
+  const [alertLoading, setAlertLoading] = useState(false);
 
   // Review form state
   const [paidOrders, setPaidOrders]     = useState([]);
@@ -71,6 +73,12 @@ export default function ProductDetail() {
       .catch(() => navigate('/marketplace'));
     loadReviews();
   }, [id, loadReviews]);
+
+  // Load alert subscription status for buyers
+  useEffect(() => {
+    if (user?.role !== 'buyer') return;
+    api.getMyAlert(id).then(res => setAlertSet(res.subscribed)).catch(() => {});
+  }, [id, user]);
 
   // Load buyer's paid orders for this product so they can pick which to review
   useEffect(() => {
@@ -107,6 +115,23 @@ export default function ProductDetail() {
       setError(getStellarErrorMessage(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAlert() {
+    setAlertLoading(true);
+    try {
+      if (alertSet) {
+        await api.removeStockAlert(id);
+        setAlertSet(false);
+      } else {
+        await api.setStockAlert(id);
+        setAlertSet(true);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAlertLoading(false);
     }
   }
 
@@ -213,16 +238,32 @@ export default function ProductDetail() {
         <div style={s.total}>Total: <strong>{total} XLM</strong></div>
         {error && <div style={s.err}>{error}</div>}
 
-        {user?.role === 'buyer' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={useEscrow} onChange={e => setUseEscrow(e.target.checked)} />
-            🔒 Use Escrow Payment (funds held until delivery, claimable by farmer after delivery)
-          </label>
+        {product.quantity === 0 ? (
+          <div>
+            <div style={{ color: '#c0392b', fontWeight: 600, marginBottom: 12 }}>⚠️ Out of stock</div>
+            {user?.role === 'buyer' && (
+              <button
+                style={{ ...s.btn, background: alertSet ? '#888' : '#2d6a4f' }}
+                onClick={handleAlert}
+                disabled={alertLoading}
+              >
+                {alertLoading ? '...' : alertSet ? '🔔 Alert Set — Click to Unsubscribe' : '🔔 Notify Me When Back in Stock'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {user?.role === 'buyer' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 14, cursor: 'pointer' }}>
+                <input type="checkbox" checked={useEscrow} onChange={e => setUseEscrow(e.target.checked)} />
+                🔒 Use Escrow Payment (funds held until delivery, claimable by farmer after delivery)
+              </label>
+            )}
+            <button style={s.btn} onClick={handleBuy} disabled={loading}>
+              {loading ? 'Processing payment...' : `${useEscrow ? '🔒 Pay to Escrow' : 'Buy Now'} · ${total} XLM`}
+            </button>
+          </>
         )}
-
-        <button style={s.btn} onClick={handleBuy} disabled={loading}>
-          {loading ? 'Processing payment...' : `${useEscrow ? '🔒 Pay to Escrow' : 'Buy Now'} · ${total} XLM`}
-        </button>
       </div>
 
       {/* Reviews section */}
