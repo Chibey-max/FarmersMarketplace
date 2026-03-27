@@ -24,6 +24,7 @@ const orderMax   = parseInt(process.env.RATE_LIMIT_ORDER_MAX   || '10');
 
 const orderLimiter = rateLimit({
   windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_ORDER_MAX || '10'),
   max: orderMax,
   standardHeaders: true,
   legacyHeaders: false,

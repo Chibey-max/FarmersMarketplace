@@ -43,6 +43,9 @@ describe('POST /api/products/:id/alert', () => {
     expect(res.body.code).toBe('in_stock');
   });
 
+  test('200 — inserts alert for out-of-stock product', async () => {
+    const runMock = jest.fn().mockReturnValue({ lastInsertRowid: 1 });
+    mockDb.prepare.mockReturnValue({ get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }), run: runMock, all: jest.fn() });
   test('201/200 — inserts alert for out-of-stock product', async () => {
     const runMock = jest.fn().mockReturnValue({ lastInsertRowid: 1 });
     const s = { get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }), run: runMock, all: jest.fn() };
@@ -55,6 +58,11 @@ describe('POST /api/products/:id/alert', () => {
   });
 
   test('409 on duplicate subscription', async () => {
+    mockDb.prepare.mockReturnValue({
+      get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }),
+      run: jest.fn().mockImplementation(() => { throw new Error('UNIQUE constraint failed'); }),
+      all: jest.fn(),
+    });
     const s = {
       get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }),
       run: jest.fn().mockImplementation(() => { throw new Error('UNIQUE constraint failed'); }),
@@ -119,6 +127,11 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
       { email: 'bob@example.com',   name: 'Bob'   },
     ];
     const runMock = jest.fn().mockReturnValue({ changes: 1 });
+    mockDb.prepare
+      .mockReturnValueOnce({ get: jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }), run: runMock, all: jest.fn() })
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() })
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn().mockReturnValue(subscribers) })
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() });
     // prepare() is called multiple times; we need different behaviour per call
     mockDb.prepare
       .mockReturnValueOnce({ get: jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }), run: runMock, all: jest.fn() }) // SELECT product
@@ -139,6 +152,7 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
     );
   });
 
+  test('does not notify when product was already in stock', async () => {
   test('does not notify when restocking a product that was already in stock', async () => {
     mockDb.prepare.mockReturnValue({
       get:  jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 5, farmer_id: 2 }),
@@ -158,6 +172,11 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
 
   test('does not fail if email send throws', async () => {
     mailer.sendBackInStockEmail.mockRejectedValueOnce(new Error('SMTP down'));
+    mockDb.prepare
+      .mockReturnValueOnce({ get: jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }), run: jest.fn(), all: jest.fn() })
+      .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn() })
+      .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn().mockReturnValue([{ email: 'x@x.com', name: 'X' }]) })
+      .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn() });
     mockDb.prepare.mockReturnValue({
       get:  jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }),
       run:  jest.fn(),
@@ -168,6 +187,7 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
       .patch('/api/products/5/restock')
       .set('Authorization', `Bearer ${farmerToken}`)
       .send({ quantity: 5 });
+    expect(res.status).toBe(200);
 
     expect(res.status).toBe(200); // request succeeds regardless
   });

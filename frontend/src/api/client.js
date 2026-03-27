@@ -152,6 +152,9 @@ export const api = {
   getTransactions: function() { return request('/wallet/transactions'); },
   fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
 
+  setStockAlert:    (productId) => request(`/products/${productId}/alert`,        { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`,        { method: 'DELETE' }),
+  getMyAlert:       (productId) => request(`/products/${productId}/alert/status`),
   fundEscrow: (orderId) => request(`/orders/${orderId}/escrow`, { method: 'POST' }),
   claimEscrow: (orderId) => request(`/orders/${orderId}/claim`, { method: 'POST' }),
 

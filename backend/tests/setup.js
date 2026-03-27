@@ -11,6 +11,8 @@
  */
 
 // Must be set before app.js is required — app validates this on load
+process.env.JWT_SECRET             = process.env.JWT_SECRET || 'test-secret-for-jest';
+process.env.NODE_ENV               = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-jest';
 process.env.NODE_ENV = 'test';
 // Raise rate limits so tests don't get throttled

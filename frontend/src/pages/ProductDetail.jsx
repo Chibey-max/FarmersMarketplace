@@ -93,6 +93,23 @@ export default function ProductDetail() {
 
   const total = (product.price * qty).toFixed(2);
 
+  async function handleAlert() {
+    setAlertLoading(true);
+    try {
+      if (alertSet) {
+        await api.removeStockAlert(id);
+        setAlertSet(false);
+      } else {
+        await api.setStockAlert(id);
+        setAlertSet(true);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAlertLoading(false);
+    }
+  }
+
   async function handleBuy() {
     if (!user) return navigate('/login');
     if (user.role === 'farmer') return setError('Farmers cannot place orders');
@@ -270,6 +287,9 @@ export default function ProductDetail() {
             )}
           </div>
         ) : (
+          <button style={s.btn} onClick={handleBuy} disabled={loading}>
+            {loading ? 'Processing payment...' : `Buy Now · ${total} XLM`}
+          </button>
           <>
             {user?.role === 'buyer' && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 14, cursor: 'pointer' }}>
