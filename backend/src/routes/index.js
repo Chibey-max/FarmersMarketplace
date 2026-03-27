@@ -27,6 +27,12 @@ router.use('/api/v1',          require('./reviews'));
 
 router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' }));
 
+// Non-versioned routes (used by frontend)
+router.use('/api/auth',      require('./auth'));
+router.use('/api/products',  require('./products'));
+router.use('/api/orders',    require('./orders'));
+router.use('/api/wallet',    require('./wallet'));
+router.use('/api/analytics', require('./analytics'));
 // Unversioned routes under /api
 router.use('/api/auth',     require('./auth'));
 router.use('/api/products', require('./products'));
