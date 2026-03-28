@@ -343,6 +343,9 @@ export const api = {
   pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
   resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
 
+  // Seed phrase backup & recovery
+  getSeedPhrase: (password) => request('/auth/seed-phrase', { method: 'POST', body: { password } }),
+  recoverAccount: (body) => request('/auth/recover', { method: 'POST', body }),
   // Availability calendar
   getCalendar: (productId) => request(`/products/${productId}/calendar`),
   setCalendarWeek: (productId, body) => request(`/products/${productId}/calendar`, { method: 'POST', body }),
