@@ -60,7 +60,7 @@ router.get('/fee-preview', (req, res) => {
   res.json({ success: true, total: amount, feePercent: info.feePercent, feeAmount: info.feeAmount, farmerAmount: info.farmerAmount });
 });
 
-// POST /api/orders - buyer places + pays for an order
+// POST /api/orders - buyer places an order; TX submitted async
 router.post('/', auth, validate.order, async (req, res) => {
   if (req.user.role !== 'buyer') {
     return err(res, 403, 'Only buyers can place orders', 'forbidden');
@@ -194,9 +194,7 @@ router.post('/', auth, validate.order, async (req, res) => {
     const deducted = db.prepare(
       'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?'
     ).run(qty, productId, qty);
-
     if (deducted.changes === 0) throw new Error('Insufficient stock');
-
     const order = db.prepare(
       'INSERT INTO orders (buyer_id, product_id, quantity, total_price, status, address_id) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(buyerId, productId, qty, total, 'pending', addressId || null);

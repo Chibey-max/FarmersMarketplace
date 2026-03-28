@@ -10,6 +10,9 @@ import StarRating from '../components/StarRating';
 import Spinner from '../components/Spinner';
 import { useTranslation } from 'react-i18next';
 
+const POLL_INTERVAL_MS = 3000;
+const TIMEOUT_MS = 60000;
+
 const s = {
   page: { maxWidth: 640, margin: "40px auto", padding: 16 },
   card: {
@@ -66,6 +69,8 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [confirming, setConfirming] = useState(null); // { orderId, startedAt }
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const { usd } = useXlmRate();
   const [addresses, setAddresses] = useState([]);
@@ -321,6 +326,21 @@ export default function ProductDetail() {
           <button style={{ ...s.btn, marginTop: 20, background: '#555' }} onClick={() => navigate('/marketplace')}>
             {t('productDetail.backToMarketplace')}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (confirming) {
+    return (
+      <div style={s.page}>
+        <div style={s.card}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+          <div style={s.confirming}>
+            <strong>Confirming payment...</strong>
+            <p style={{ marginTop: 8, fontSize: 14 }}>Waiting for Stellar network confirmation. This usually takes a few seconds.</p>
+            <div style={s.bar}><div style={{ ...s.barFill, width: `${progress}%` }} /></div>
+          </div>
         </div>
       </div>
     );

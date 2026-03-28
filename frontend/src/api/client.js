@@ -374,6 +374,7 @@ export const api = {
   searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
 
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
+  getOrderStatus: (id) => request(`/orders/${id}/status`),
   getOrders: () => request('/orders'),
   getSales: () => request('/orders/sales'),
 
