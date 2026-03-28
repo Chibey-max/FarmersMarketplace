@@ -342,4 +342,7 @@ export const api = {
   cancelSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
   resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
+
+  // Platform fee
+  getFeePreview: (amount) => request(`/orders/fee-preview?amount=${amount}`),
 };
