@@ -85,6 +85,19 @@ router.use('/api/farmers',       require('./farmers'));
 router.use('/api/rates',         require('./rates'));
 router.use('/api',               require('./reviews'));
 router.use('/api/favorites',     require('./favorites'));
+router.use('/api/auth',      require('./auth'));
+router.use('/api/products',  require('./products'));
+router.use('/api/orders',    require('./orders'));
+router.use('/api/bundles',   require('./bundles'));
+router.use('/api/wallet',    require('./wallet'));
+router.use('/api/analytics', require('./analytics'));
+router.use('/api/admin',     require('./admin'));
+router.use('/api/farmers',   require('./farmers'));
+router.use('/api/rates',     require('./rates'));
+router.use('/api',           require('./reviews'));
+router.use('/api/favorites', require('./favorites'));
+router.use('/api/rates',     require('./rates'));
+router.use('/api',           require('./reviews'));
 
 // QR code endpoint (mounted under products so /:id/qr resolves correctly)
 router.use('/api/products',  require('./market'));
