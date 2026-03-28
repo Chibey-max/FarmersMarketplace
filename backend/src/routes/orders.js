@@ -30,6 +30,25 @@ function hasReachedDeliveryDate(preorderDeliveryDate) {
   return Math.floor(Date.now() / 1000) >= unlockUnix;
 }
 
+// Get the best matching tier price for a quantity, or base price if no tiers
+async function getTierPrice(productId, quantity) {
+  const { rows: tiers } = await db.query(
+    'SELECT min_quantity, price_per_unit FROM price_tiers WHERE product_id = $1 ORDER BY min_quantity DESC',
+    [productId]
+  );
+
+  // Find the highest min_quantity that is <= quantity
+  for (const tier of tiers) {
+    if (quantity >= tier.min_quantity) {
+      return tier.price_per_unit;
+    }
+  }
+
+  // No tier matches, return base price
+  const { rows: productRows } = await db.query('SELECT price FROM products WHERE id = $1', [productId]);
+  return productRows[0].price;
+}
+
 // POST /api/orders - buyer places + pays for an order
 router.post('/', auth, validate.order, async (req, res) => {
   if (req.user.role !== 'buyer') {
@@ -116,26 +135,25 @@ router.post('/', auth, validate.order, async (req, res) => {
   }
 
   if (address_id) {
-    const address = db
-      .prepare('SELECT * FROM addresses WHERE id = ? AND user_id = ?')
-      .get(address_id, req.user.id);
-    if (!address) return err(res, 400, 'Invalid address_id', 'validation_error');
+    const { rows: addrRows } = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [address_id, req.user.id]);
+    if (!addrRows[0]) return err(res, 400, 'Invalid address_id', 'validation_error');
   }
 
-  const product = db.prepare(`
-    SELECT p.*, u.stellar_public_key as farmer_wallet
-    FROM products p
-    JOIN users u ON p.farmer_id = u.id
-    WHERE p.id = ?
-  `).get(product_id);
-
+  const { rows: prodRows } = await db.query(
+    'SELECT p.*, u.stellar_public_key as farmer_wallet FROM products p JOIN users u ON p.farmer_id = u.id WHERE p.id = $1',
+    [product_id]
+  );
+  const product = prodRows[0];
   if (!product) return err(res, 404, 'Product not found', 'not_found');
 
-  const buyer = db
-    .prepare('SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = ?')
-    .get(req.user.id);
+  const { rows: buyerRows } = await db.query(
+    'SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = $1',
+    [req.user.id]
+  );
+  const buyer = buyerRows[0];
 
-  const subtotal = product.price * quantity;
+  const unitPrice = await getTierPrice(product_id, quantity);
+  const subtotal = unitPrice * quantity;
   let discount = 0;
   let appliedCoupon = null;
 
@@ -158,29 +176,6 @@ router.post('/', auth, validate.order, async (req, res) => {
       available: balance.toFixed(7),
     });
   }
-
-  const reserveStock = db.transaction((buyerId, productId, qty, total, addressId) => {
-    const deducted = db.prepare(
-      'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?'
-    ).run(qty, productId, qty);
-
-    if (deducted.changes === 0) throw new Error('Insufficient stock');
-
-    const order = db.prepare(
-      'INSERT INTO orders (buyer_id, product_id, quantity, total_price, status, address_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(buyerId, productId, qty, total, 'pending', addressId || null);
-
-    return order.lastInsertRowid;
-  });
-
-  let orderId;
-  try {
-    orderId = reserveStock(req.user.id, product_id, quantity, totalPrice, address_id);
-  } catch (e) {
-    return err(res, 400, e.message, 'insufficient_stock');
-  }
-  if (balance < totalPrice + 0.00001)
-    return res.status(402).json({ success: false, message: 'Insufficient XLM balance', code: 'insufficient_balance', required: (totalPrice + 0.00001).toFixed(7), available: balance.toFixed(7) });
 
   // Atomic stock decrement
   const { rowCount } = await db.query(
@@ -214,9 +209,10 @@ router.post('/', auth, validate.order, async (req, res) => {
       txHash = hold.txHash;
       balanceId = hold.balanceId;
 
-      db.prepare(
-        'UPDATE orders SET status = ?, stellar_tx_hash = ?, escrow_balance_id = ?, escrow_status = ? WHERE id = ?'
-      ).run('paid', txHash, balanceId, 'funded', orderId);
+      await db.query(
+        'UPDATE orders SET status = $1, stellar_tx_hash = $2, escrow_balance_id = $3, escrow_status = $4 WHERE id = $5',
+        ['paid', txHash, balanceId, 'funded', orderId]
+      );
     } else {
       txHash = await sendPayment({
         senderSecret: buyer.stellar_secret_key,
@@ -225,8 +221,7 @@ router.post('/', auth, validate.order, async (req, res) => {
         memo: `Order#${orderId}`,
       });
 
-      db.prepare('UPDATE orders SET status = ?, stellar_tx_hash = ? WHERE id = ?')
-        .run('paid', txHash, orderId);
+      await db.query('UPDATE orders SET status = $1, stellar_tx_hash = $2 WHERE id = $3', ['paid', txHash, orderId]);
     }
 
     const farmer = db.prepare('SELECT id, name, email, stellar_public_key FROM users WHERE id = ?')
@@ -245,7 +240,7 @@ router.post('/', auth, validate.order, async (req, res) => {
             amount: 1.0,
             memo: `Referral Bonus: ${buyer.name}`.slice(0, 28),
           });
-          db.prepare('UPDATE users SET referral_bonus_sent = 1 WHERE id = ?').run(buyer.id);
+          await db.query('UPDATE users SET referral_bonus_sent = 1 WHERE id = $1', [buyer.id]);
         } catch (bonusErr) {
           console.error('[Referral] Failed to send bonus:', bonusErr.message);
         }
@@ -264,12 +259,11 @@ router.post('/', auth, validate.order, async (req, res) => {
       farmer,
     }).catch((mailErr) => console.error('Email notification failed:', mailErr.message));
 
-    const updated = db.prepare(
-      'SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = ?'
-    ).get(product_id);
+    const { rows: updRows } = await db.query('SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = $1', [product_id]);
+    const updated = updRows[0];
 
     if (updated && updated.quantity <= updated.low_stock_threshold && !updated.low_stock_alerted) {
-      db.prepare('UPDATE products SET low_stock_alerted = 1 WHERE id = ?').run(product_id);
+      await db.query('UPDATE products SET low_stock_alerted = 1 WHERE id = $1', [product_id]);
       sendLowStockAlert({ product: { ...product, quantity: updated.quantity }, farmer })
         .catch((lowStockErr) => console.error('Low-stock alert failed:', lowStockErr.message));
     }
