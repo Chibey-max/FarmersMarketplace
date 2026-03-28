@@ -47,12 +47,21 @@ module.exports = {
     low_stock_threshold: z.coerce.number().int().nonnegative().optional(),
     image_url: z.string().optional().or(z.literal('')),
     tags: z.array(z.string()).optional(),
+    nutrition: z.object({
+      calories: z.coerce.number().nonnegative('calories must be non-negative').optional(),
+      protein: z.coerce.number().nonnegative('protein must be non-negative').optional(),
+      carbs: z.coerce.number().nonnegative('carbs must be non-negative').optional(),
+      fat: z.coerce.number().nonnegative('fat must be non-negative').optional(),
+      fiber: z.coerce.number().nonnegative('fiber must be non-negative').optional(),
+      vitamins: z.record(z.coerce.number().nonnegative('vitamin values must be non-negative')).optional(),
+    }).optional(),
   })),
 
   order: validate(z.object({
     product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
     quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
     address_id: z.coerce.number().int().positive().optional(),
+    use_soroban_escrow: z.coerce.boolean().optional(),
   })),
 
   updateOrderStatus: validate(z.object({
@@ -89,5 +98,13 @@ module.exports = {
     latitude: z.coerce.number().min(-90).max(90).optional(),
     longitude: z.coerce.number().min(-180).max(180).optional(),
     severity: z.enum(['low', 'medium', 'high']).optional(),
+  confirmPassword: validate(z.object({
+    password: z.string().min(1, 'password is required'),
+  })),
+
+  recover: validate(z.object({
+    email: z.string().email('valid email required'),
+    password: z.string().min(1, 'password is required'),
+    mnemonic: z.string().min(1, 'mnemonic is required'),
   })),
 };
