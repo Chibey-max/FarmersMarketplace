@@ -17,6 +17,8 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const { enforceHttps, hsts } = require('./middleware/https');
 const { csrfProtect, csrfTokenHandler } = require('./middleware/csrf');
 const { errorHandler } = require('./middleware/error');
@@ -79,6 +81,9 @@ app.use(sanitizeResponse);
 
 // Serve uploaded product images as static files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+// Interactive API documentation
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Expose CSRF token endpoint (must be before csrfProtect so it's never blocked)
 app.get("/api/csrf-token", csrfTokenHandler);
