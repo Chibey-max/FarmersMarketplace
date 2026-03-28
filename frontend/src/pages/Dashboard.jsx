@@ -15,16 +15,16 @@ const STATUS_ICON = { pending: '⏳', paid: '✅', processing: '⚙️', shipped
 const STATUS_COLOR = { paid: '#2d6a4f', pending: '#856404', processing: '#004085', shipped: '#0c5460', delivered: '#155724', failed: '#c0392b' };
 
 const s = {
-  page: { maxWidth: 900, margin: '0 auto', padding: 24 },
+  page: { maxWidth: 900, margin: '0 auto', padding: 16 },
   title: { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 24 },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 24 },
   card: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 8px #0001' },
   label: { display: 'block', fontSize: 13, marginBottom: 4, color: '#555' },
-  input: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 4, boxSizing: 'border-box' },
-  inputErr: { width: '100%', padding: '9px 12px', border: '1px solid #c0392b', borderRadius: 8, fontSize: 14, marginBottom: 4, boxSizing: 'border-box' },
+  input: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 16, marginBottom: 4, boxSizing: 'border-box', minHeight: 44 },
+  inputErr: { width: '100%', padding: '9px 12px', border: '1px solid #c0392b', borderRadius: 8, fontSize: 16, marginBottom: 4, boxSizing: 'border-box', minHeight: 44 },
   fieldErr: { color: '#c0392b', fontSize: 12, marginBottom: 8 },
   textarea: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 4, minHeight: 80, resize: 'vertical', boxSizing: 'border-box' },
-  btn: { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600 },
+  btn: { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600, minHeight: 44 },
   product: { borderBottom: '1px solid #eee', padding: '12px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   del: { background: '#fee', color: '#c0392b', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
   msg: { padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 14 },
@@ -96,7 +96,7 @@ export default function Dashboard() {
   const fileInputRef = useRef(null);
 
   // profile state
-  const [profile, setProfile]       = useState({ bio: '', location: '', avatar_url: '', federation_name: '' });
+  const [profile, setProfile]       = useState({ bio: '', location: '', avatar_url: '', federation_name: '', latitude: '', longitude: '', farm_address: '' });
   const [profileMsg, setProfileMsg] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -271,7 +271,7 @@ export default function Dashboard() {
 
       if (profileRes.data) {
         const d = profileRes.data;
-        setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '' });
+        setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
         if (d.avatar_url) setAvatarPreview(d.avatar_url);
       }
     } catch (err) {
@@ -288,7 +288,7 @@ export default function Dashboard() {
       api.getFarmer(user.id)
         .then(res => {
           const d = res.data;
-          setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '' });
+          setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
           if (d.avatar_url) setAvatarPreview(d.avatar_url);
         })
         .catch(() => {});
@@ -356,8 +356,12 @@ export default function Dashboard() {
         location: profile.location || undefined,
         avatar_url: finalAvatarUrl || undefined,
         federation_name: profile.federation_name || undefined,
+        latitude: profile.latitude !== '' ? parseFloat(profile.latitude) : null,
+        longitude: profile.longitude !== '' ? parseFloat(profile.longitude) : null,
+        farm_address: profile.farm_address || undefined,
       });
-      setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '', federation_name: res.data.federation_name || '' });
+      const d = res.data;
+      setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
       setProfileMsg({ type: 'ok', text: t('dashboard.profileUpdated') });
     } catch (err) {
       setProfileMsg({ type: 'err', text: getErrorMessage(err) });
@@ -1015,6 +1019,48 @@ export default function Dashboard() {
             onChange={e => setProfile(p => ({ ...p, location: e.target.value }))}
             maxLength={100}
           />
+
+          <label style={s.label}>Farm Address <span style={{ color: '#aaa', fontWeight: 400 }}>(optional · shown on map)</span></label>
+          <input
+            style={s.input}
+            placeholder="e.g. 123 Farm Road, Nairobi, Kenya"
+            value={profile.farm_address || ''}
+            onChange={e => setProfile(p => ({ ...p, farm_address: e.target.value }))}
+            maxLength={200}
+          />
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={s.label}>Latitude <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                style={s.input}
+                type="number"
+                step="any"
+                min="-90"
+                max="90"
+                placeholder="e.g. -1.2921"
+                value={profile.latitude}
+                onChange={e => setProfile(p => ({ ...p, latitude: e.target.value }))}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={s.label}>Longitude <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                style={s.input}
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                placeholder="e.g. 36.8219"
+                value={profile.longitude}
+                onChange={e => setProfile(p => ({ ...p, longitude: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+            💡 Tip: Find your coordinates at{' '}
+            <a href="https://www.latlong.net" target="_blank" rel="noopener noreferrer" style={{ color: '#2d6a4f' }}>latlong.net</a>
+          </div>
 
           <label style={s.label}>{t('dashboard.bio')}</label>
           <textarea
