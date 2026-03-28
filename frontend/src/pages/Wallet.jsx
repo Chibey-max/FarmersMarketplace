@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/Spinner';
 import { getStellarErrorMessage } from '../utils/stellarErrors';
 import { getErrorMessage } from '../utils/errorMessages';
+import { useTranslation } from 'react-i18next';
 
 const DISCLAIMER_KEY = 'testnet_disclaimer_dismissed';
 const RECONNECT_BASE_MS = 2000;
@@ -157,10 +158,9 @@ function Toast({ toasts }) {
 }
 
 export default function Wallet() {
+  const { t } = useTranslation();
   const { user } = useAuth();
-  const [disclaimerVisible, setDisclaimerVisible] = useState(
-    () => !sessionStorage.getItem(DISCLAIMER_KEY),
-  );
+  const [disclaimerVisible, setDisclaimerVisible] = useState(() => !sessionStorage.getItem(DISCLAIMER_KEY));
   const [wallet, setWallet] = useState(null);
   const [txs, setTxs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -188,7 +188,7 @@ export default function Wallet() {
   const unmounted = useRef(false);
 
   function dismissDisclaimer() {
-    sessionStorage.setItem(DISCLAIMER_KEY, "1");
+    sessionStorage.setItem(DISCLAIMER_KEY, '1');
     setDisclaimerVisible(false);
   }
 
@@ -203,20 +203,16 @@ export default function Wallet() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [w, t] = await Promise.all([
-        api.getWallet(),
-        api.getTransactions(),
-      ]);
+      const [w, t] = await Promise.all([api.getWallet(), api.getTransactions()]);
       setWallet(w);
       setTxs(t.data ?? t);
     } catch (e) {
       setLoadError(getStellarErrorMessage(e));
       setTxs(t);
     } catch (err) {
-      setLoadError(getStellarErrorMessage(err));
+      setLoadError(getStellarErrorMessage(err) || getErrorMessage(err));
     } finally {
       setLoading(false);
-      setLoadError(getErrorMessage(err));
     }
   }, []);
 
@@ -296,12 +292,12 @@ export default function Wallet() {
     setFundMsg(null);
     try {
       const res = await api.fundWallet();
-      setFundMsg({ type: "ok", text: res.message });
+      setFundMsg({ type: 'ok', text: res.message });
       load();
     } catch (e) {
       setFundMsg({ type: 'err', text: getStellarErrorMessage(e) });
     } catch (err) {
-      setFundMsg({ type: "err", text: getErrorMessage(err) });
+      setFundMsg({ type: 'err', text: getErrorMessage(err) });
     } finally {
       setFunding(false);
     }
@@ -310,7 +306,6 @@ export default function Wallet() {
   async function handleSend(e) {
     e.preventDefault();
     setSendMsg(null);
-
     const amount = parseFloat(sendForm.amount);
     if (!sendForm.destination.trim()) return setSendMsg({ type: 'err', text: 'Destination address is required.' });
     if (!/^G[A-Z2-7]{55}$/.test(sendForm.destination.trim())) return setSendMsg({ type: 'err', text: 'Invalid Stellar public key.' });
@@ -318,52 +313,25 @@ export default function Wallet() {
     if (!amount || amount <= 0) return setSendMsg({ type: 'err', text: 'Amount must be greater than 0.' });
     if (sendForm.memo.length > 28) return setSendMsg({ type: 'err', text: 'Memo must be 28 characters or fewer.' });
     if (!sendForm.destination.trim())
-      return setSendMsg({
-        type: "err",
-        text: "Destination address is required.",
-      });
-    if (
-      !/^G[A-Z2-7]{55}$/.test(sendForm.destination.trim()) &&
-      !sendForm.destination.includes("*")
-    )
-      return setSendMsg({
-        type: "err",
-        text: "Invalid destination. Enter a Stellar public key (G...) or federation address (name*domain).",
-      });
-    if (sendForm.currency !== "XLM")
-      return setSendMsg({
-        type: "err",
-        text: `"${sendForm.currency}" is not supported. This platform only supports XLM (Stellar Lumens). Other tokens and assets cannot be sent here.`,
-      });
+      return setSendMsg({ type: 'err', text: 'Destination address is required.' });
+    if (!/^G[A-Z2-7]{55}$/.test(sendForm.destination.trim()) && !sendForm.destination.includes('*'))
+      return setSendMsg({ type: 'err', text: 'Invalid destination. Enter a Stellar public key (G...) or federation address (name*domain).' });
+    if (sendForm.currency !== 'XLM')
+      return setSendMsg({ type: 'err', text: `"${sendForm.currency}" is not supported. This platform only supports XLM.` });
     if (!amount || amount <= 0)
-      return setSendMsg({
-        type: "err",
-        text: "Amount must be greater than 0.",
-      });
+      return setSendMsg({ type: 'err', text: 'Amount must be greater than 0.' });
     if (sendForm.memo.length > 28)
-      return setSendMsg({
-        type: "err",
-        text: "Memo must be 28 characters or fewer.",
-      });
-
+      return setSendMsg({ type: 'err', text: 'Memo must be 28 characters or fewer.' });
     setSending(true);
     try {
-      const res = await api.sendXLM({
-        destination: sendForm.destination.trim(),
-        amount,
-        memo: sendForm.memo.trim() || undefined,
-      });
-      setSendMsg({
-        type: "ok",
-        text: `Sent ${res.amount} XLM`,
-        txHash: res.txHash,
-      });
-      setSendForm({ destination: "", amount: "", currency: "XLM", memo: "" });
+      const res = await api.sendXLM({ destination: sendForm.destination.trim(), amount, memo: sendForm.memo.trim() || undefined });
+      setSendMsg({ type: 'ok', text: `Sent ${res.amount} XLM`, txHash: res.txHash });
+      setSendForm({ destination: '', amount: '', currency: 'XLM', memo: '' });
       load();
     } catch (e) {
       setSendMsg({ type: 'err', text: e.message });
     } catch (err) {
-      setSendMsg({ type: "err", text: getErrorMessage(err) });
+      setSendMsg({ type: 'err', text: getErrorMessage(err) });
     } finally {
       setSending(false);
     }
@@ -388,80 +356,27 @@ export default function Wallet() {
             withdrawn. It exists solely for testing purposes. Never send real
             assets to a testnet address.
           </div>
-          <button
-            style={s.disclaimerDismiss}
-            onClick={dismissDisclaimer}
-            aria-label="Dismiss disclaimer"
-            title="Dismiss"
-          >
-            ×
-          </button>
+          <button style={s.disclaimerDismiss} onClick={dismissDisclaimer} aria-label="Dismiss disclaimer" title="Dismiss">×</button>
         </div>
       )}
 
       {loadError && (
-        <div
-          style={{
-            ...s.msg,
-            background: "#fee",
-            color: "#c0392b",
-            marginBottom: 16,
-          }}
-        >
-          ⚠️ {loadError}
-        </div>
-      )}
-
-      <div style={s.card}>
-        <div style={{ fontSize: 13, color: "#888", marginBottom: 4 }}>
-          XLM Balance
-        </div>
-        <div style={s.balance}>
-          {wallet ? wallet.balance.toFixed(2) : "—"} XLM
-        </div>
-        <div style={s.key}>Public Key: {wallet?.publicKey}</div>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#888",
-            marginTop: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <span
-            style={{
-              background: "#fff3cd",
-              color: "#856404",
-              border: "1px solid #ffc107",
-              borderRadius: 4,
-              padding: "1px 7px",
-              fontWeight: 600,
-              fontSize: 11,
-            }}
-          >
-            TESTNET
-          </span>
         <div style={{ ...s.msg, background: '#fee', color: '#c0392b', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>⚠️ {loadError}</span>
-          <button
-            style={{ background: '#c0392b', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-            onClick={load}
-          >
-            Retry
+          <button style={{ background: '#c0392b', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }} onClick={load}>
+            {t('wallet.retry')}
           </button>
         </div>
       )}
 
       {loading && !loadError ? (
-        <Spinner message="Loading wallet..." />
+        <Spinner message={t('common.loading')} />
       ) : (
         <>
           <div style={s.card}>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>XLM Balance</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>{t('wallet.xlmBalance')}</div>
             <div style={s.balance}>{wallet ? wallet.balance.toFixed(2) : '—'} XLM</div>
-            <div style={s.key}>Public Key: {wallet?.publicKey}</div>
+            <div style={s.key}>{t('wallet.publicKey', { key: wallet?.publicKey })}</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffc107', borderRadius: 4, padding: '1px 7px', fontWeight: 600, fontSize: 11 }}>TESTNET</span>
           XLM shown here has no real-world value.
@@ -527,46 +442,15 @@ export default function Wallet() {
             >
               {wallet?.referralCode || "—"}
             </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(wallet?.referralCode);
-                alert("Code copied!");
-              }}
-              style={{
-                padding: "4px 12px",
-                fontSize: 12,
-                borderRadius: 6,
-                border: "1px solid #2d6a4f",
-                background: "none",
-                color: "#2d6a4f",
-                cursor: "pointer",
-              }}
-            >
-              Copy Code
+            <button style={s.btn} onClick={handleFund} disabled={funding}>
+              {funding ? t('wallet.funding') : t('wallet.fund')}
             </button>
+            {fundMsg && (
+              <div style={{ ...s.msg, background: fundMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: fundMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+                {fundMsg.text}
+              </div>
+            )}
           </div>
-
-          <div style={{ marginTop: 16 }}>
-            <button
-              onClick={() => {
-                const link = `${window.location.origin}/register?ref=${wallet?.referralCode}`;
-                navigator.clipboard.writeText(link);
-                alert("Referral link copied!");
-              }}
-              style={{ ...s.btn, marginTop: 0, width: "100%" }}
-            >
-              🔗 Copy Referral Link
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Send XLM card */}
-      <div style={s.card}>
-        <h3 style={{ marginBottom: 4, color: "#333" }}>↑ Send XLM</h3>
-        <p style={{ fontSize: 13, color: "#888", marginBottom: 8 }}>
-          Transfer XLM to any external Stellar address.
-        </p>
 
         <form onSubmit={handleSend} noValidate>
           <label style={s.label}>Destination Address</label>
@@ -689,8 +573,6 @@ export default function Wallet() {
               </div>
             )}
           </div>
-        )}
-      </div>
 
       <div style={s.card}>
         <h3 style={{ marginBottom: 16, color: "#333" }}>Transaction History</h3>
@@ -722,8 +604,6 @@ export default function Wallet() {
               View ↗
             </a>
           </div>
-        ))}
-      </div>
         </>
       )}
     </div>
