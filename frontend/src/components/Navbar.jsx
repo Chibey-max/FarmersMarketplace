@@ -1,49 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const s = {
-  nav: { background: '#2d6a4f', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  nav: { background: '#2d6a4f', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
   brand: { color: '#fff', fontWeight: 700, fontSize: 20, textDecoration: 'none' },
-  links: { display: 'flex', gap: 16, alignItems: 'center' },
-  link: { color: '#d8f3dc', textDecoration: 'none', fontSize: 14 },
-  btn: { background: '#95d5b2', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 600 },
-  toggleBtn: { background: 'none', border: '1px solid #95d5b2', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 16, color: '#d8f3dc' },
+  link: { color: '#d8f3dc', textDecoration: 'none', fontSize: 14, minHeight: 44, display: 'flex', alignItems: 'center' },
+  btn: { background: '#95d5b2', border: 'none', borderRadius: 6, padding: '10px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 600, minHeight: 44 },
+  toggleBtn: { background: 'none', border: '1px solid #95d5b2', borderRadius: 6, padding: '10px', cursor: 'pointer', fontSize: 16, color: '#d8f3dc', minHeight: 44, minWidth: 44 },
 };
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
 
   function handleLogout() {
     logout();
     navigate('/login');
+    setOpen(false);
   }
 
   return (
     <nav style={s.nav}>
       <Link to="/" style={s.brand}>🌿 FarmersMarket</Link>
-      <div style={s.links}>
+      <button className="hamburger" onClick={() => setOpen(o => !o)} aria-label="Toggle menu" aria-expanded={open}>
+        {open ? '✕' : '☰'}
+      </button>
+      <div className={`nav-links${open ? ' open' : ''}`}>
         {user ? (
           <>
-            <Link to="/marketplace" style={s.link}>Browse</Link>
-            {user.role === 'farmer' && <Link to="/dashboard" style={s.link}>Dashboard</Link>}
-            {user.role === 'buyer' && <Link to="/orders" style={s.link}>Orders</Link>}
-            {user.role === 'buyer' && <Link to="/addresses" style={s.link}>Addresses</Link>}
-            {user.role === 'admin' && <Link to="/admin" style={{ ...s.link, color: '#ffeaa7' }}>Admin</Link>}
-            {user.role !== 'admin' && <Link to="/wallet" style={s.link}>Wallet</Link>}
+            <Link to="/marketplace" style={s.link} onClick={() => setOpen(false)}>Browse</Link>
+            {user.role === 'farmer' && <Link to="/dashboard" style={s.link} onClick={() => setOpen(false)}>Dashboard</Link>}
+            {user.role === 'buyer' && <Link to="/orders" style={s.link} onClick={() => setOpen(false)}>Orders</Link>}
+            {user.role === 'buyer' && <Link to="/addresses" style={s.link} onClick={() => setOpen(false)}>Addresses</Link>}
+            {user.role === 'admin' && <Link to="/admin" style={{ ...s.link, color: '#ffeaa7' }} onClick={() => setOpen(false)}>Admin</Link>}
+            {user.role !== 'admin' && <Link to="/wallet" style={s.link} onClick={() => setOpen(false)}>Wallet</Link>}
             <span style={{ color: '#d8f3dc', fontSize: 13 }}>{user.name} ({user.role})</span>
-          <button style={s.toggleBtn} onClick={toggleTheme} aria-label="Toggle dark mode" title="Toggle dark mode">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <button style={s.btn} onClick={handleLogout}>Logout</button>
+            <button style={s.toggleBtn} onClick={toggleTheme} aria-label="Toggle dark mode">{theme === 'light' ? '🌙' : '☀️'}</button>
+            <button style={s.btn} onClick={handleLogout}>Logout</button>
           </>
         ) : (
           <>
-            <Link to="/login" style={s.link}>Login</Link>
-            <Link to="/register" style={s.link}>Register</Link>
+            <Link to="/login" style={s.link} onClick={() => setOpen(false)}>Login</Link>
+            <Link to="/register" style={s.link} onClick={() => setOpen(false)}>Register</Link>
           </>
         )}
       </div>

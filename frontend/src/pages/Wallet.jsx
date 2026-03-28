@@ -12,7 +12,7 @@ import { getErrorMessage } from '../utils/errorMessages';
 const DISCLAIMER_KEY = "testnet_disclaimer_dismissed";
 
 const s = {
-  page: { maxWidth: 800, margin: "0 auto", padding: 24 },
+  page: { maxWidth: 800, margin: "0 auto", padding: 16 },
   disclaimer: {
     background: "#fff8e1",
     border: "1px solid #f9a825",
@@ -66,6 +66,7 @@ const s = {
     cursor: "pointer",
     fontWeight: 600,
     marginTop: 16,
+    minHeight: 44,
   },
   btnDanger: {
     background: "#c0392b",
@@ -99,8 +100,9 @@ const s = {
     padding: "9px 12px",
     border: "1px solid #ddd",
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: 16,
     boxSizing: "border-box",
+    minHeight: 44,
   },
   row: { display: "flex", gap: 12, alignItems: "flex-end", marginTop: 16 },
 };
@@ -424,7 +426,7 @@ export default function Wallet() {
             spellCheck={false}
           />
 
-          <div style={{ display: "flex", gap: 12 }}>
+          <div className="send-row" style={{ display: "flex", gap: 12 }}>
             <div style={{ flex: 1 }}>
               <label style={s.label}>Amount</label>
               <div style={{ display: "flex", gap: 8 }}>
