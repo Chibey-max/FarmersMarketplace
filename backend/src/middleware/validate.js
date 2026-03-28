@@ -81,4 +81,8 @@ module.exports = {
     amount: z.coerce.number().positive('amount must be a positive number').refine(v => v >= 0.0000001, 'amount too small'),
     memo: z.string().max(28, 'memo must be 28 characters or fewer').optional(),
   })),
+
+  waitlist: validate(z.object({
+    quantity: z.coerce.number().int().positive('quantity must be a positive integer').max(1000, 'quantity cannot exceed 1000 units'),
+  })),
 };
