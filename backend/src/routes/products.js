@@ -27,6 +27,55 @@ function normalizePreorderInput(body) {
   return { isPreorder, preorderDeliveryDate };
 }
 
+/**
+ * @swagger
+ * tags:
+ *   name: Products
+ *   description: Product listings
+ */
+
+/**
+ * @swagger
+ * /api/products:
+ *   get:
+ *     summary: Browse all products (paginated, filterable)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: category
+ *         schema: { type: string }
+ *       - in: query
+ *         name: minPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: maxPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: seller
+ *         schema: { type: string }
+ *       - in: query
+ *         name: available
+ *         schema: { type: string, default: 'true' }
+ *     responses:
+ *       200:
+ *         description: Paginated product list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/Product' }
+ */
 // GET /api/products - public browse with optional filters
 router.get('/', (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -186,6 +235,32 @@ router.get('/categories', (_req, res) => {
   res.json({ success: true, data: rows.map((r) => r.category) });
 });
 
+/**
+ * @swagger
+ * /api/products/mine/list:
+ *   get:
+ *     summary: Get farmer's own product listings
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of farmer's products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Product' }
+ *       403:
+ *         description: Farmers only
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/products/mine/list - farmer's own products
 router.get('/mine/list', auth, (req, res) => {
   if (req.user.role !== 'farmer') return err(res, 403, 'Farmers only', 'forbidden');
@@ -236,6 +311,33 @@ router.post('/upload-image', auth, (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /api/products/{id}:
+ *   get:
+ *     summary: Get product by ID
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Product detail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data: { $ref: '#/components/schemas/Product' }
+ *       404:
+ *         description: Product not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/products/:id
 router.get('/:id', (req, res) => {
   const product = db.prepare(`
@@ -331,6 +433,47 @@ router.get('/:id/alert/status', auth, async (req, res) => {
   res.json({ success: true, subscribed: !!rows[0] });
 });
 
+/**
+ * @swagger
+ * /api/products:
+ *   post:
+ *     summary: Create a new product listing (farmer only)
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, price, quantity]
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               category: { type: string }
+ *               price: { type: number, description: Price in XLM }
+ *               quantity: { type: integer }
+ *               unit: { type: string, example: kg }
+ *               image_url: { type: string }
+ *               low_stock_threshold: { type: integer, default: 5 }
+ *     responses:
+ *       200:
+ *         description: Product created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 id: { type: integer }
+ *                 message: { type: string }
+ *       403:
+ *         description: Only farmers can list products
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/products - farmer only
 router.post('/', auth, validate.product, (req, res) => {
   if (req.user.role !== 'farmer') return err(res, 403, 'Only farmers can list products', 'forbidden');
@@ -505,6 +648,35 @@ router.patch('/:id', auth, async (req, res) => {
   res.json({ success: true, message: 'Product updated' });
 });
 
+/**
+ * @swagger
+ * /api/products/{id}:
+ *   delete:
+ *     summary: Delete a product listing (farmer only)
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Product deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *       404:
+ *         description: Not found or not yours
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // DELETE /api/products/:id
 router.delete('/:id', auth, (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ? AND farmer_id = ?').get(req.params.id, req.user.id);

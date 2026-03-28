@@ -6,6 +6,34 @@ const stellar = require('../utils/stellar');
 const { getBalance, getTransactions, fundTestnetAccount, sendPayment } = stellar;
 const { err } = require('../middleware/error');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Wallet
+ *   description: Stellar wallet operations
+ */
+
+/**
+ * @swagger
+ * /api/wallet:
+ *   get:
+ *     summary: Get wallet balance and public key
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wallet info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 publicKey: { type: string }
+ *                 balance: { type: number, description: XLM balance }
+ *                 referralCode: { type: string }
+ */
 // GET /api/wallet
 router.get('/', auth, async (req, res) => {
   const { rows } = await db.query('SELECT stellar_public_key, referral_code FROM users WHERE id = $1', [req.user.id]);
@@ -14,6 +42,33 @@ router.get('/', auth, async (req, res) => {
   res.json({ success: true, publicKey: user.stellar_public_key, balance, referralCode: user.referral_code });
 });
 
+/**
+ * @swagger
+ * /api/wallet/transactions:
+ *   get:
+ *     summary: Get transaction history for the wallet
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of Stellar transactions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       type: { type: string }
+ *                       amount: { type: string }
+ *                       created_at: { type: string, format: date-time }
+ */
 // GET /api/wallet/transactions
 router.get('/transactions', auth, async (req, res) => {
   const { rows } = await db.query('SELECT stellar_public_key FROM users WHERE id = $1', [req.user.id]);
@@ -21,6 +76,31 @@ router.get('/transactions', auth, async (req, res) => {
   res.json({ success: true, data: txs });
 });
 
+/**
+ * @swagger
+ * /api/wallet/fund:
+ *   post:
+ *     summary: Fund wallet via Stellar Friendbot (testnet only)
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Account funded with 10,000 XLM
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 balance: { type: number }
+ *       400:
+ *         description: Only available on testnet
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/wallet/fund
 router.post('/fund', auth, async (req, res) => {
   if (!stellar.isTestnet) return err(res, 400, 'Only available on testnet', 'testnet_only');

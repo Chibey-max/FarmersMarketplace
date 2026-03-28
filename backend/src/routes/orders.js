@@ -40,6 +40,61 @@ const { sendOrderEmails, sendStatusUpdateEmail, sendLowStockAlert } = require('.
 const { err } = require('../middleware/error');
 const { getCachedResponse, cacheResponse } = require('../utils/idempotency');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Orders
+ *   description: Order placement and management
+ */
+
+/**
+ * @swagger
+ * /api/orders:
+ *   post:
+ *     summary: Place and pay for an order (buyer only)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: x-idempotency-key
+ *         schema: { type: string }
+ *         description: Optional idempotency key to prevent duplicate orders
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [product_id, quantity]
+ *             properties:
+ *               product_id: { type: integer }
+ *               quantity: { type: integer, minimum: 1 }
+ *               address_id: { type: integer, description: Optional delivery address ID }
+ *     responses:
+ *       200:
+ *         description: Order placed and payment successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 orderId: { type: integer }
+ *                 status: { type: string, example: paid }
+ *                 txHash: { type: string }
+ *                 totalPrice: { type: number }
+ *       402:
+ *         description: Insufficient balance or payment failed
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Only buyers can place orders
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/orders
 router.post('/', auth, validate.order, async (req, res) => {
   if (req.user.role !== 'buyer') return err(res, 403, 'Only buyers can place orders', 'forbidden');
@@ -305,6 +360,38 @@ router.post('/', auth, validate.order, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: Get buyer's order history
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, paid, failed] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated order list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/Order' }
+ */
 // GET /api/orders
 router.get('/', auth, async (req, res) => {
   const { status } = req.query;
@@ -358,6 +445,40 @@ router.get('/', auth, async (req, res) => {
   res.json({ success: true, data, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
+/**
+ * @swagger
+ * /api/orders/sales:
+ *   get:
+ *     summary: Get farmer's incoming sales
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated sales list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/Order' }
+ *       403:
+ *         description: Farmers only
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/orders/sales - farmer's incoming orders
 router.get('/sales', auth, (req, res) => {
   if (req.user.role !== 'farmer') {
