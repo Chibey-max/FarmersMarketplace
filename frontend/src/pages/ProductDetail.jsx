@@ -122,6 +122,20 @@ export default function ProductDetail() {
   const subtotal = (product.price * qty).toFixed(2);
   const total = couponResult ? couponResult.final_total.toFixed(2) : subtotal;
 
+  async function handleAlert() {
+    setAlertLoading(true);
+    try {
+      if (alertSet) {
+        await api.deleteAlert(id);
+        setAlertSet(false);
+      } else {
+        await api.createAlert(id);
+        setAlertSet(true);
+      }
+    } catch { /* ignore */ }
+    setAlertLoading(false);
+  }
+
   async function handleApplyCoupon() {
     if (!couponCode.trim()) return;
     setCouponLoading(true);

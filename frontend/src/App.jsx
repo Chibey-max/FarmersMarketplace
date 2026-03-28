@@ -72,17 +72,12 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <LoadingProvider>
-          <AppContent />
-        </LoadingProvider>
+        <FavoritesProvider>
+          <LoadingProvider>
+            <AppContent />
+          </LoadingProvider>
+        </FavoritesProvider>
       </AuthProvider>
     </ErrorBoundary>
-    <AuthProvider>
-      <FavoritesProvider>
-        <LoadingProvider>
-          <AppContent />
-        </LoadingProvider>
-      </FavoritesProvider>
-    </AuthProvider>
   );
 }

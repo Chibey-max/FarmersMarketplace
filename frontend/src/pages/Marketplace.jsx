@@ -8,6 +8,7 @@ import { useDebounce } from '../utils/useDebounce';
 import StarRating from '../components/StarRating';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
+import AuctionCard from '../components/AuctionCard';
 import { useTranslation } from 'react-i18next';
 
 const CATEGORIES = ['all', 'vegetables', 'fruits', 'grains', 'dairy', 'herbs', 'other'];
@@ -52,6 +53,7 @@ const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', se
 export default function Marketplace() {
   const { t } = useTranslation();
   const [products, setProducts]     = useState([]);
+  const [auctions, setAuctions]     = useState([]);
   const [filters, setFilters]       = useState(EMPTY_FILTERS);
   const [loading, setLoading]       = useState(false);
   const [page, setPage]             = useState(1);
@@ -89,6 +91,8 @@ export default function Marketplace() {
       }
       setProducts(data);
       setPagination({ total, totalPages });
+      const aucs = await api.getAuctions().catch(() => ({ data: [] }));
+      setAuctions(aucs.data || []);
     } catch {
       setProducts([]);
     }
@@ -98,6 +102,7 @@ export default function Marketplace() {
   useEffect(() => {
     setPage(1);
     load({ ...filters, search: debouncedSearch, seller: debouncedSeller }, 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, debouncedSeller, filters.category, filters.minPrice, filters.maxPrice, filters.available]);
 
   useEffect(() => {
