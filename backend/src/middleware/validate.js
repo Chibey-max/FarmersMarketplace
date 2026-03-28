@@ -91,6 +91,13 @@ module.exports = {
     memo: z.string().max(28, 'memo must be 28 characters or fewer').optional(),
   })),
 
+  cropAlert: validate(z.object({
+    alert_type: z.enum(['pest', 'disease', 'weather', 'other']),
+    description: z.string().min(10, 'description must be at least 10 characters').max(1000, 'description must be 1000 characters or fewer'),
+    location: z.string().max(200, 'location must be 200 characters or fewer').optional(),
+    latitude: z.coerce.number().min(-90).max(90).optional(),
+    longitude: z.coerce.number().min(-180).max(180).optional(),
+    severity: z.enum(['low', 'medium', 'high']).optional(),
   confirmPassword: validate(z.object({
     password: z.string().min(1, 'password is required'),
   })),
