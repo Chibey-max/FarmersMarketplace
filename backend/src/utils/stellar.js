@@ -304,6 +304,48 @@ async function resolveFederationAddress(address, db) {
   }
 }
 
+// Mint reward tokens to a buyer after purchase
+async function mintRewardTokens(buyerAddress, amount) {
+  const contractId = process.env.REWARD_TOKEN_CONTRACT_ID;
+  if (!contractId) {
+    console.warn('[Stellar] REWARD_TOKEN_CONTRACT_ID not set, skipping reward mint');
+    return null;
+  }
+
+  const adminSecret = process.env.REWARD_TOKEN_ADMIN_SECRET;
+  if (!adminSecret) {
+    console.warn('[Stellar] REWARD_TOKEN_ADMIN_SECRET not set, skipping reward mint');
+    return null;
+  }
+
+  try {
+    const adminKeypair = StellarSdk.Keypair.fromSecret(adminSecret);
+    const adminAccount = await server.loadAccount(adminKeypair.publicKey());
+
+    const contract = new StellarSdk.Contract(contractId);
+    const transaction = new StellarSdk.TransactionBuilder(adminAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase,
+    })
+      .addOperation(
+        contract.call(
+          'mint',
+          StellarSdk.nativeToScVal(buyerAddress, { type: 'address' }),
+          StellarSdk.nativeToScVal(amount, { type: 'i128' })
+        )
+      )
+      .setTimeout(30)
+      .build();
+
+    transaction.sign(adminKeypair);
+    const result = await server.submitTransaction(transaction);
+    return result.hash;
+  } catch (error) {
+    console.error('[Stellar] Failed to mint reward tokens:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   isTestnet,
   server,
@@ -317,4 +359,5 @@ module.exports = {
   claimBalance,
   getContractState,
   resolveFederationAddress,
+  mintRewardTokens,
 };
