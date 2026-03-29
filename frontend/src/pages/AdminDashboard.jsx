@@ -29,6 +29,10 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [error, setError] = useState('');
+  const [contracts, setContracts] = useState([]);
+  const [contractForm, setContractForm] = useState({ contract_id: '', name: '', type: 'escrow', network: 'testnet' });
+  const [contractMsg, setContractMsg] = useState('');
+  const [contractFilter, setContractFilter] = useState({ network: '', type: '' });
 
   // Contract state viewer
   const [contractId, setContractId] = useState('');
@@ -55,7 +59,35 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadStats();
     loadUsers(1);
+    loadContracts();
   }, []);
+
+  async function loadContracts(filters = contractFilter) {
+    try {
+      const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+      const res = await api.adminGetContracts(params ? `?${params}` : '');
+      setContracts(res.data ?? []);
+    } catch (e) { setContractMsg(e.message); }
+  }
+
+  async function handleRegisterContract(e) {
+    e.preventDefault();
+    setContractMsg('');
+    try {
+      await api.adminRegisterContract(contractForm);
+      setContractForm({ contract_id: '', name: '', type: 'escrow', network: 'testnet' });
+      setContractMsg('Contract registered.');
+      loadContracts();
+    } catch (err) { setContractMsg(err.message); }
+  }
+
+  async function handleDeregisterContract(id) {
+    if (!confirm('Deregister this contract?')) return;
+    try {
+      await api.adminDeregisterContract(id);
+      loadContracts();
+    } catch (e) { setContractMsg(e.message); }
+  }
 
   async function handleDeactivate(id, name) {
     if (!confirm(`Deactivate user "${name}"?`)) return;
