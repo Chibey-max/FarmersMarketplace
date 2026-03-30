@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [sales, setSales] = useState([]);
   const [salesMsg, setSalesMsg] = useState({});
   const [forecastByProduct, setForecastByProduct] = useState({});
+  const [waitlistAnalytics, setWaitlistAnalytics] = useState([]);
   const [videoUploadingByProduct, setVideoUploadingByProduct] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -238,6 +239,10 @@ export default function Dashboard() {
         forecastMap[item.product_id] = item;
       });
       setForecastByProduct(forecastMap);
+
+      // Waitlist analytics
+      const waitlistRes = await api.getWaitlistAnalytics().catch(() => ({ data: [] }));
+      setWaitlistAnalytics(waitlistRes.data ?? []);
 
       const allPending = await Promise.all(
         coops.map(c => api.getPendingTxs(c.id).then(r => (r.data ?? []).map(t => ({ ...t, coopName: c.name }))).catch(() => []))
@@ -527,6 +532,42 @@ export default function Dashboard() {
   return (
     <div style={s.page}>
       <div style={s.title}>🌾 Farmer Dashboard</div>
+
+      {/* Waitlist Analytics */}
+      {waitlistAnalytics.length > 0 && (
+        <div style={{ ...s.card, marginBottom: 24 }}>
+          <h3 style={{ marginBottom: 12, color: '#333' }}>📋 Waitlist Analytics</h3>
+          {waitlistAnalytics.some((r) => r.alert) && (
+            <div style={{ background: '#fff3cd', color: '#856404', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 14, fontWeight: 600 }}>
+              ⚠️ Some products have more than 10 buyers waiting — consider restocking!
+            </div>
+          )}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #eee' }}>
+                <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Product</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Queue</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Avg Wait (hrs)</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Conversion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waitlistAnalytics.map((r) => (
+                <tr key={r.product_id} style={{ borderBottom: '1px solid #f0f0f0', background: r.alert ? '#fff8e1' : 'transparent' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>
+                    {r.product_name}
+                    {r.alert && <span style={{ marginLeft: 6, fontSize: 11, background: '#f9a825', color: '#fff', borderRadius: 4, padding: '1px 6px' }}>High demand</span>}
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>{r.queue_length}</td>
+                  <td style={{ padding: '6px 8px' }}>{r.avg_wait_hours != null ? r.avg_wait_hours : '—'}</td>
+                  <td style={{ padding: '6px 8px' }}>{r.conversion_rate != null ? `${r.conversion_rate}%` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div style={{ ...s.card, marginBottom: 24 }}>
         <h3 style={{ marginBottom: 12, color: '#333' }}>Flash Sales</h3>
         {flashSaleMsg && <div style={{ ...s.msg, background: flashSaleMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: flashSaleMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>{flashSaleMsg.text}</div>}

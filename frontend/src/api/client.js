@@ -213,6 +213,7 @@ export const api = {
   getXlmRate: () => request('/rates/xlm-usd'),
   getAnalytics: () => request('/analytics/farmer'),
   getForecast: () => request('/analytics/farmer/forecast'),
+  getWaitlistAnalytics: () => request('/analytics/farmer/waitlist'),
 
 
   createAddress: (body) => request('/addresses', { method: 'POST', body }),
