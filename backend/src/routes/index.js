@@ -251,6 +251,14 @@ router.get("/api/v1/health", async (req, res) => {
 router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' }));
 
+// SEO endpoints
+router.get('/sitemap.xml', require('./sitemap'));
+router.get('/robots.txt', (_, res) => {
+  res.type('text/plain').send(
+    `User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/sitemap.xml`
+  );
+});
+
 // Rate limiters
 router.use('/api', generalLimiter);
 router.use('/api/auth/login', authLimiter);
@@ -328,6 +336,7 @@ router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin', require('./admin'));
 router.use('/api/farmers', require('./farmers'));
 router.use('/api/rates', require('./rates'));
+router.use('/api/recommendations', require('./recommendations'));
 router.use('/api/favorites', require('./favorites'));
 router.use('/api/addresses', require('./addresses'));
 router.use('/api/messages', require('./messages'));
@@ -353,7 +362,9 @@ router.use('/api/cooperatives', require('./cooperatives'));
 router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin', require('./admin'));
 router.use('/api/farmers', require('./farmers'));
+router.use('/api/farmers', require('./bundleDiscounts'));
 router.use('/api/rates', require('./rates'));
+router.use('/api/recommendations', require('./recommendations'));
 router.use('/api/favorites', require('./favorites'));
 router.use('/api/addresses', require('./addresses'));
 router.use('/api/messages', require('./messages'));
@@ -390,6 +401,7 @@ router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin', require('./admin'));
 router.use('/api/farmers', require('./farmers'));
 router.use('/api/rates', require('./rates'));
+router.use('/api/recommendations', require('./recommendations'));
 router.use('/api', require('./reviews'));
 router.use('/api/favorites', require('./favorites'));
 router.use('/api/auth', require('./auth'));
@@ -401,9 +413,11 @@ router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin', require('./admin'));
 router.use('/api/farmers', require('./farmers'));
 router.use('/api/rates', require('./rates'));
+router.use('/api/recommendations', require('./recommendations'));
 router.use('/api', require('./reviews'));
 router.use('/api/favorites', require('./favorites'));
 router.use('/api/rates', require('./rates'));
+router.use('/api/recommendations', require('./recommendations'));
 router.use('/api', require('./reviews'));
 
 // QR code endpoint (mounted under products so /:id/qr resolves correctly)
@@ -461,5 +475,7 @@ router.use('/api/products/bulk', require('./bulkUpload'));
 router.use('/api/messages', require('./messages'));
 
 router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+
+router.use('/api/announcements', require('./announcements'));
 
 module.exports = router;
