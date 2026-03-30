@@ -211,6 +211,9 @@ export const api = {
   getMyAlert: (productId) => request(`/products/${productId}/alert/status`),
 
   getXlmRate: () => request('/rates/xlm-usd'),
+  bulkUpdatePrices: (updates, adjustment_percent) =>
+    request('/products/bulk-price', { method: 'PATCH', body: { updates, adjustment_percent } }),
+
   getAnalytics: () => request('/analytics/farmer'),
   getForecast: () => request('/analytics/farmer/forecast'),
 

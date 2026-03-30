@@ -70,6 +70,11 @@ export default function Dashboard() {
   const [flashSaleForm, setFlashSaleForm] = useState({ product_id: '', flash_sale_price: '', flash_sale_ends_at: '' });
   const [flashSaleMsg, setFlashSaleMsg] = useState(null);
 
+  // bulk price update state
+  const [bulkPriceSelections, setBulkPriceSelections] = useState({}); // { [productId]: newPrice }
+  const [bulkAdjustPct, setBulkAdjustPct] = useState('');
+  const [bulkPriceMsg, setBulkPriceMsg] = useState(null);
+
   // bundle state
   const [bundles, setBundles] = useState([]);
   const [bundleForm, setBundleForm] = useState({ name: '', description: '', price: '', items: [{ product_id: '', quantity: 1 }] });
@@ -524,6 +529,34 @@ export default function Dashboard() {
       });
   }
 
+  async function handleBulkPriceUpdate() {
+    setBulkPriceMsg(null);
+    const updates = Object.entries(bulkPriceSelections)
+      .filter(([, price]) => price !== '')
+      .map(([id, price]) => ({ id: Number(id), price: parseFloat(price) }));
+
+    if (updates.length === 0 && bulkAdjustPct === '') {
+      setBulkPriceMsg({ type: 'err', text: 'Select products and enter prices, or enter a % adjustment.' });
+      return;
+    }
+
+    const adjustmentPercent = bulkAdjustPct !== '' ? parseFloat(bulkAdjustPct) : undefined;
+    const payload = adjustmentPercent != null
+      ? { updates: products.map((p) => ({ id: p.id })), adjustment_percent: adjustmentPercent }
+      : { updates };
+
+    try {
+      const res = await api.bulkUpdatePrices(payload.updates, payload.adjustment_percent);
+      const { updated, failed } = res.data;
+      setBulkPriceMsg({ type: 'ok', text: `Updated ${updated.length} product(s).${failed.length ? ` ${failed.length} failed.` : ''}` });
+      setBulkPriceSelections({});
+      setBulkAdjustPct('');
+      load();
+    } catch (e) {
+      setBulkPriceMsg({ type: 'err', text: e.message || 'Bulk update failed' });
+    }
+  }
+
   return (
     <div style={s.page}>
       <div style={s.title}>🌾 Farmer Dashboard</div>
@@ -560,6 +593,59 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* Bulk Price Update */}
+      <div style={{ ...s.card, marginBottom: 24 }}>
+        <h3 style={{ marginBottom: 12, color: '#333' }}>💰 Bulk Price Update</h3>
+        {bulkPriceMsg && (
+          <div style={{ ...s.msg, background: bulkPriceMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: bulkPriceMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+            {bulkPriceMsg.text}
+          </div>
+        )}
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <label style={{ ...s.label, marginBottom: 0 }}>% Adjustment (all products):</label>
+          <input
+            style={{ ...s.input, width: 100, marginBottom: 0 }}
+            type="number"
+            step="any"
+            placeholder="e.g. +10"
+            value={bulkAdjustPct}
+            onChange={(e) => setBulkAdjustPct(e.target.value)}
+          />
+          <span style={{ fontSize: 13, color: '#888' }}>or set individual prices below</span>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, marginBottom: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #eee' }}>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Product</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>Current Price (XLM)</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px', color: '#555' }}>New Price (XLM)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((p) => (
+              <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '6px 8px' }}>{p.name}</td>
+                <td style={{ padding: '6px 8px', color: '#666' }}>{p.price}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  <input
+                    style={{ ...s.input, width: 100, marginBottom: 0, padding: '5px 8px' }}
+                    type="number"
+                    min="0.0000001"
+                    step="any"
+                    placeholder="—"
+                    value={bulkPriceSelections[p.id] || ''}
+                    onChange={(e) => setBulkPriceSelections((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                    disabled={bulkAdjustPct !== ''}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button style={s.btn} onClick={handleBulkPriceUpdate}>Apply Price Update</button>
+      </div>
+
       <div style={s.grid}>
         <div style={s.card}>
           <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
