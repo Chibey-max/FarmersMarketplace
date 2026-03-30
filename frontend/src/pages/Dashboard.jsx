@@ -27,6 +27,7 @@ const EMPTY_FORM = {
   quantity: '',
   unit: 'kg',
   category: 'other',
+  min_order_quantity: '',
   is_preorder: false,
   preorder_delivery_date: '',
   nutrition: {
@@ -448,6 +449,7 @@ export default function Dashboard() {
         pricing_type: form.pricing_type || 'unit',
         min_weight: form.pricing_type === 'weight' ? parseFloat(form.min_weight) : undefined,
         max_weight: form.pricing_type === 'weight' ? parseFloat(form.max_weight) : undefined,
+        min_order_quantity: form.min_order_quantity ? parseInt(form.min_order_quantity) : undefined,
       });
       setMsg({ type: 'ok', text: t('dashboard.productListedOk') });
       setForm(EMPTY_FORM);
@@ -576,6 +578,8 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+            <label style={s.label}>Min Order Quantity (MOQ)</label>
+            <input style={s.input} type="number" min="1" step="1" value={form.min_order_quantity || ''} onChange={e => setForm({ ...form, min_order_quantity: e.target.value })} placeholder="1 (default)" />
             <button style={s.btn} type="submit">List Product</button>
 
             <details style={{ marginTop: 16 }}>

@@ -58,6 +58,7 @@ module.exports = {
     pricing_type: z.enum(['unit', 'weight']).optional(),
     min_weight: z.coerce.number().positive('min_weight must be positive').optional(),
     max_weight: z.coerce.number().positive('max_weight must be positive').optional(),
+    min_order_quantity: z.coerce.number().int().positive('min_order_quantity must be a positive integer').optional(),
   }).refine(d => {
     if (d.pricing_type === 'weight') {
       if (!d.min_weight || !d.max_weight) return false;

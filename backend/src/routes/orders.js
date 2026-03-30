@@ -246,6 +246,12 @@ router.post('/', auth, validate.order, async (req, res) => {
     if (weight > product.max_weight) return err(res, 400, `weight cannot exceed ${product.max_weight} ${product.unit}`, 'validation_error');
   }
 
+  // MOQ validation
+  const moq = product.min_order_quantity || 1;
+  if (quantity < moq) {
+    return err(res, 400, `Minimum order is ${moq} units`, 'below_moq');
+  }
+
   const { rows: bRows } = await db.query(
     'SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = $1',
     [req.user.id]

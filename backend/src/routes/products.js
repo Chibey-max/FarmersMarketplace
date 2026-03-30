@@ -624,10 +624,11 @@ router.post('/', auth, validate.product, async (req, res) => {
   const pricingType = req.body.pricing_type === 'weight' ? 'weight' : 'unit';
   const minWeight   = pricingType === 'weight' ? parseFloat(req.body.min_weight) : null;
   const maxWeight   = pricingType === 'weight' ? parseFloat(req.body.max_weight) : null;
+  const minOrderQty = parseInt(req.body.min_order_quantity, 10) || 1;
 
   const { rows } = await db.query(
-    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
-    [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight]
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight, min_order_quantity) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id',
+    [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight, minOrderQty]
   );
   res.json({ success: true, id: rows[0].id, message: 'Product listed' });
 });
@@ -641,7 +642,7 @@ router.patch('/:id', auth, async (req, res) => {
   if (!product) return err(res, 404, 'Not found or not yours', 'not_found');
 
   const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'carbon_kg_per_unit'];
-  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'nutrition', 'pricing_type', 'min_weight', 'max_weight'];
+  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'nutrition', 'pricing_type', 'min_weight', 'max_weight', 'min_order_quantity'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -724,6 +725,13 @@ router.patch('/:id', auth, async (req, res) => {
 
   if (updates.nutrition !== undefined) {
     updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.min_order_quantity !== undefined) {
+    updates.min_order_quantity = parseInt(updates.min_order_quantity, 10);
+    if (isNaN(updates.min_order_quantity) || updates.min_order_quantity < 1) {
+      return err(res, 400, 'min_order_quantity must be a positive integer', 'validation_error');
+    }
   }
 
   const keys   = Object.keys(updates);
