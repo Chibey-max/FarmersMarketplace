@@ -1,3 +1,4 @@
+require('./config'); // validate env vars before anything else
 const app = require('./app');
 const logger = require('./logger');
 const cron = require('node-cron');
