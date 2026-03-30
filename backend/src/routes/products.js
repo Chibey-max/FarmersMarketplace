@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
+const cache = require('../cache');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { err } = require('../middleware/error');
@@ -8,23 +9,23 @@ const { sanitizeText } = require('../utils/sanitize');
 const { sendBackInStockEmail } = require('../utils/mailer');
 const AutomaticOrderProcessor = require('../services/AutomaticOrderProcessor');
 
+const VALID_ALLERGENS = ['gluten', 'nuts', 'dairy', 'eggs', 'soy', 'shellfish'];
+
+function parseAndValidateAllergens(value) {
+  if (value === undefined || value === null) return { allergens: null };
+  const arr = Array.isArray(value) ? value : [];
+  const invalid = arr.find(a => !VALID_ALLERGENS.includes(a));
+  if (invalid) return { error: `Invalid allergen: "${invalid}". Must be one of: ${VALID_ALLERGENS.join(', ')}` };
+  return { allergens: arr.length > 0 ? JSON.stringify(arr) : null };
+}
+
 function normalizePreorderInput(body) {
-  const isPreorder =
-    body.is_preorder === true || body.is_preorder === 1 || body.is_preorder === '1';
-
+  const isPreorder = body.is_preorder === true || body.is_preorder === 1 || body.is_preorder === '1';
   let preorderDeliveryDate = body.preorder_delivery_date || null;
-  if (preorderDeliveryDate) {
-    preorderDeliveryDate = String(preorderDeliveryDate).trim();
+  if (preorderDeliveryDate) preorderDeliveryDate = String(preorderDeliveryDate).trim();
+  if (isPreorder && (!preorderDeliveryDate || !/^\d{4}-\d{2}-\d{2}$/.test(preorderDeliveryDate))) {
+    return { error: 'preorder_delivery_date must be provided as YYYY-MM-DD' };
   }
-
-  if (isPreorder) {
-    if (!preorderDeliveryDate || !/^\d{4}-\d{2}-\d{2}$/.test(preorderDeliveryDate)) {
-      return { error: 'preorder_delivery_date must be provided as YYYY-MM-DD for pre-order products' };
-    }
-  } else {
-    preorderDeliveryDate = null;
-  }
-
   return { isPreorder, preorderDeliveryDate };
 }
 
@@ -32,13 +33,6 @@ function isFlashSaleActive(product) {
   if (!product?.flash_sale_price || !product?.flash_sale_ends_at) return false;
   return new Date(product.flash_sale_ends_at).getTime() > Date.now();
 }
-
-/**
- * @swagger
- * tags:
- *   name: Products
- *   description: Product listings
- */
 
 /**
  * @swagger
@@ -52,6 +46,18 @@ router.get('/', async (req, res) => {
   const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
   const offset = (page - 1) * limit;
   const { category, minPrice, maxPrice, seller, available = 'true', lat, lng, radius, grade } = req.query;
+ *     summary: Browse products
+ */
+router.get('/', async (req, res) => {
+// GET /api/products - public browse with optional filters
+router.get('/', async (req, res) => {
+  const cacheKey = `products:${JSON.stringify(req.query)}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+  const offset = (page - 1) * limit;
+  const { category, minPrice, maxPrice, seller, available = 'true' } = req.query;
 
   const conditions = [];
   const params = [];
@@ -64,6 +70,7 @@ router.get('/', async (req, res) => {
   if (minPrice !== undefined) {
     const min = parseFloat(minPrice);
     if (!isNaN(min)) {
+    if (!Number.isNaN(min)) {
       conditions.push(`p.price >= $${params.length + 1}`);
       params.push(min);
     }
@@ -71,6 +78,7 @@ router.get('/', async (req, res) => {
   if (maxPrice !== undefined) {
     const max = parseFloat(maxPrice);
     if (!isNaN(max)) {
+    if (!Number.isNaN(max)) {
       conditions.push(`p.price <= $${params.length + 1}`);
       params.push(max);
     }
@@ -80,6 +88,32 @@ router.get('/', async (req, res) => {
     params.push(`%${seller}%`);
   }
   if (grade) {
+    conditions.push(`u.name LIKE $${params.length + 1}`);
+    params.push(`%${seller}%`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const { rows: countRows } = await db.query(`SELECT COUNT(*) as count FROM products p JOIN users u ON p.farmer_id = u.id ${where}`, params);
+  const total = parseInt(countRows[0].count);
+
+  const { rows: data } = await db.query(
+    `SELECT p.*, u.name as farmer_name FROM products p JOIN users u ON p.farmer_id = u.id
+     ${where} ORDER BY p.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset]
+router.get('/', async (req, res) => {
+  const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+  const offset = (page - 1) * limit;
+  const { category, minPrice, maxPrice, seller, available = 'true', lat, lng, radius } = req.query;
+
+  const conditions = [];
+  const params = [];
+
+  if (available === 'true') conditions.push('p.quantity > 0');
+  if (category)   { conditions.push(`p.category = $${params.length + 1}`);        params.push(category); }
+  if (minPrice !== undefined) { const min = parseFloat(minPrice); if (!isNaN(min)) { conditions.push(`p.price >= $${params.length + 1}`); params.push(min); } }
+  if (maxPrice !== undefined) { const max = parseFloat(maxPrice); if (!isNaN(max)) { conditions.push(`p.price <= $${params.length + 1}`); params.push(max); } }
+  if (seller)     { conditions.push(`u.name ILIKE $${params.length + 1}`);         params.push(`%${seller}%`); }
+  if (req.query.grade) {
     const VALID_GRADES = ['A', 'B', 'C', 'Ungraded'];
     if (VALID_GRADES.includes(grade)) {
       conditions.push(`p.grade = $${params.length + 1}`);
@@ -121,14 +155,56 @@ router.get('/', async (req, res) => {
     [...params, limit, offset]
   );
 
-  res.json({
-    success: true,
-    data: products,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  });
+  const payload = { success: true, data: products, total, page, limit, totalPages: Math.ceil(total / limit) };
+  await cache.set(cacheKey, payload, 60);
+  res.json(payload);
+});
+
+// GET /api/products/search?q=tomato - FTS5 full-text search
+router.get('/search', (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) {
+    const products = db.prepare(
+      `SELECT p.*, u.name as farmer_name FROM products p JOIN users u ON p.farmer_id = u.id ORDER BY p.created_at DESC LIMIT 100`
+    ).all();
+    return res.json({ success: true, data: products });
+  }
+
+  try {
+    const products = db.prepare(`
+      SELECT p.*, u.id as farmer_id, u.name as farmer_name, u.bio as farmer_bio, u.location as farmer_location, u.avatar_url as farmer_avatar, fts.rank
+      FROM products_fts fts
+      JOIN products p ON p.id = fts.rowid
+      JOIN users u ON p.farmer_id = u.id
+      WHERE products_fts MATCH ?
+      ORDER BY fts.rank
+      LIMIT 100
+    `).all(q);
+    res.json({ success: true, data: products });
+    const products = db.prepare(
+      `SELECT p.*, u.name as farmer_name, fts.rank
+       FROM products_fts fts
+       JOIN products p ON p.id = fts.rowid
+       JOIN users u ON p.farmer_id = u.id
+       WHERE products_fts MATCH ?
+       ORDER BY fts.rank
+       LIMIT 100`
+    ).all(q);
+    return res.json({ success: true, data: products });
+  } catch {
+    const like = `%${q}%`;
+    const products = db.prepare(
+      `SELECT p.*, u.id as farmer_id, u.name as farmer_name, u.bio as farmer_bio, u.location as farmer_location, u.avatar_url as farmer_avatar FROM products p JOIN users u ON p.farmer_id = u.id
+       WHERE p.name LIKE ? OR p.description LIKE ? ORDER BY p.created_at DESC LIMIT 100`
+    ).all(like, like);
+    return res.json({ success: true, data: products });
+     GROUP BY p.id, u.name
+     ORDER BY p.created_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    dataParams
+  );
+
+  res.json({ success: true, data, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
 // GET /api/products/search
@@ -145,6 +221,7 @@ router.get('/search', async (req, res) => {
     `SELECT p.*, u.name as farmer_name FROM products p JOIN users u ON p.farmer_id = u.id
      WHERE p.name ${db.isPostgres ? 'ILIKE' : 'LIKE'} $1 OR p.description ${db.isPostgres ? 'ILIKE' : 'LIKE'} $2 
      ORDER BY p.created_at DESC LIMIT 100`,
+     WHERE p.name LIKE $1 OR p.description LIKE $2 ORDER BY p.created_at DESC LIMIT 100`,
     [like, like]
   );
   res.json({ success: true, data: rows });
@@ -155,6 +232,7 @@ router.get('/categories', async (_req, res) => {
   res.json({ success: true, data: rows.map(r => r.category) });
 });
 
+// GET /api/products/mine/list
 router.get('/mine/list', auth, async (req, res) => {
   if (req.user.role !== 'farmer') return err(res, 403, 'Farmers only', 'forbidden');
   const { rows } = await db.query('SELECT * FROM products WHERE farmer_id = $1 ORDER BY created_at DESC', [req.user.id]);
@@ -169,10 +247,36 @@ router.post('/upload-image', auth, (req, res) => {
       return err(res, 400, 'Upload failed', 'upload_error');
     }
     if (!req.file) return err(res, 400, 'No image file provided', 'no_file');
+       if (uploadErr.code === 'LIMIT_FILE_SIZE') return err(res, 400, 'Image too large', 'file_too_large');
+       return err(res, 400, 'Upload failed', 'upload_error');
+    }
+    if (!req.file) return err(res, 400, 'No file provided', 'no_file');
     res.json({ success: true, imageUrl: `/uploads/${req.file.filename}` });
   });
 });
 
+// POST /api/products
+router.post('/', auth, validate.product, async (req, res) => {
+  if (req.user.role !== 'farmer') return err(res, 403, 'Farmers only', 'forbidden');
+  const { name, description, unit, category, image_url, nutrition } = req.body;
+  const price = parseFloat(req.body.price);
+  const quantity = parseInt(req.body.quantity, 10);
+
+  if (!name?.trim() || isNaN(price) || price <= 0 || isNaN(quantity) || quantity < 1) {
+    return err(res, 400, 'Invalid product data', 'validation_error');
+  }
+
+  const preorder = normalizePreorderInput(req.body);
+  if (preorder.error) return err(res, 400, preorder.error, 'validation_error');
+
+  const { rows } = await db.query(
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, is_preorder, preorder_delivery_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id',
+    [req.user.id, sanitizeText(name), sanitizeText(description||''), sanitizeText(category||''), price, quantity, sanitizeText(unit||'unit'), image_url, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, preorder.isPreorder ? 1 : 0, preorder.preorderDeliveryDate]
+  );
+  res.json({ success: true, id: rows[0].id, message: 'Product listed' });
+});
+
+// GET /api/products/:id
 router.get('/:id', async (req, res) => {
   const { rows } = await db.query(
     `SELECT p.*, u.name as farmer_name, u.bio as farmer_bio, u.location as farmer_location, u.avatar_url as farmer_avatar, u.stellar_public_key as farmer_wallet,
@@ -189,6 +293,218 @@ router.get('/:id', async (req, res) => {
   res.json({ success: true, data: rows[0] });
 });
 
+// PATCH /api/products/:id/restock
+router.patch('/:id/restock', auth, async (req, res) => {
+  if (req.user.role !== 'farmer') return err(res, 403, 'Only farmers can restock products', 'forbidden');
+  
+  const quantity = parseInt(req.body.quantity, 10);
+  if (Number.isNaN(quantity) || quantity <= 0) {
+    return err(res, 400, 'Quantity must be a positive integer', 'validation_error');
+  }
+
+  try {
+    // Get product details
+    const { rows } = await db.query('SELECT * FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
+    const product = rows[0];
+    if (!product) return err(res, 404, 'Product not found or not yours', 'not_found');
+
+    const wasOutOfStock = product.quantity === 0;
+    
+    // Update product stock atomically
+    await db.query('UPDATE products SET quantity = quantity + $1 WHERE id = $2', [quantity, req.params.id]);
+
+    // Initialize response data
+    let waitlistResults = null;
+
+    // Process waitlist if product was out of stock (automatic order processing)
+    if (wasOutOfStock) {
+      const processor = new AutomaticOrderProcessor();
+      waitlistResults = await processor.processWaitlistOnRestock(parseInt(req.params.id), quantity);
+      
+      if (!waitlistResults.success) {
+        console.error('[Restock] Waitlist processing failed:', waitlistResults.error);
+        // Don't fail the restock operation, just log the error
+      }
+    }
+
+    // Handle existing stock alert notifications (backward compatibility)
+    if (wasOutOfStock) {
+      const { rows: subscribers } = await db.query(
+        `SELECT u.email, u.name FROM stock_alerts sa JOIN users u ON sa.user_id = u.id WHERE sa.product_id = $1`,
+        [req.params.id]
+      );
+      
+      if (subscribers.length > 0) {
+        await db.query('DELETE FROM stock_alerts WHERE product_id = $1', [req.params.id]);
+        Promise.all(subscribers.map(s => sendBackInStockEmail({ email: s.email, name: s.name, productName: product.name })))
+          .catch(e => console.error('[stock-alert] Email send failed:', e.message));
+      }
+    }
+
+    // Prepare response with waitlist processing results
+    const response = {
+      success: true,
+      message: 'Restocked successfully'
+    };
+
+    // Include waitlist processing results if available
+    if (waitlistResults) {
+      response.waitlist = {
+        processed: waitlistResults.processed || 0,
+        skipped: waitlistResults.skipped || 0,
+        totalEntries: waitlistResults.totalEntries || 0,
+        remainingStock: waitlistResults.remainingStock || quantity,
+        errors: waitlistResults.errors || []
+      };
+    }
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('[Restock] Error processing restock:', error);
+    return err(res, 500, 'Internal server error during restock', 'internal_error');
+  }
+});
+
+// POST /api/products/:id/alert
+router.post('/:id/alert', auth, async (req, res) => {
+  if (req.user.role !== 'buyer') return err(res, 403, 'Only buyers can set alerts', 'forbidden');
+  const { rows } = await db.query('SELECT id, quantity FROM products WHERE id = $1', [req.params.id]);
+  if (!rows[0]) return err(res, 404, 'Product not found', 'not_found');
+  if (rows[0].quantity > 0) return err(res, 400, 'Product is already in stock', 'in_stock');
+  try {
+    await db.query('INSERT INTO stock_alerts (user_id, product_id) VALUES ($1, $2)', [req.user.id, req.params.id]);
+    res.json({ success: true, message: 'Alert set' });
+  } catch (e) {
+    if (e.message.includes('UNIQUE') || e.code === '23505') return err(res, 409, 'Alert already set', 'conflict');
+    throw e;
+  }
+});
+
+// DELETE /api/products/:id/alert
+router.delete('/:id/alert', auth, async (req, res) => {
+  await db.query('DELETE FROM stock_alerts WHERE user_id = $1 AND product_id = $2', [req.user.id, req.params.id]);
+  res.json({ success: true, message: 'Alert removed' });
+});
+
+// GET /api/products/:id/alert/status
+router.get('/:id/alert/status', auth, async (req, res) => {
+  const { rows } = await db.query('SELECT id FROM stock_alerts WHERE user_id = $1 AND product_id = $2', [req.user.id, req.params.id]);
+  res.json({ success: true, subscribed: !!rows[0] });
+});
+
+/**
+ * @swagger
+ * /api/products:
+ *   post:
+ *     summary: Create a new product listing (farmer only)
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, price, quantity]
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               category: { type: string }
+ *               price: { type: number, description: Price in XLM }
+ *               quantity: { type: integer }
+ *               unit: { type: string, example: kg }
+ *               image_url: { type: string }
+ *               low_stock_threshold: { type: integer, default: 5 }
+ *     responses:
+ *       200:
+ *         description: Product created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 id: { type: integer }
+ *                 message: { type: string }
+ *       403:
+ *         description: Only farmers can list products
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+// POST /api/products - farmer only
+router.post('/', auth, validate.product, (req, res) => {
+  if (req.user.role !== 'farmer') return err(res, 403, 'Only farmers can list products', 'forbidden');
+
+  const { name, description, unit, category, image_url, nutrition } = req.body;
+  const price = parseFloat(req.body.price);
+  const quantity = parseInt(req.body.quantity, 10);
+
+  if (!name || !name.trim()) return err(res, 400, 'Product name is required', 'validation_error');
+  if (Number.isNaN(price) || price <= 0) return err(res, 400, 'Price must be a positive number', 'validation_error');
+  if (Number.isNaN(quantity) || quantity < 1) return err(res, 400, 'Quantity must be a positive integer', 'validation_error');
+
+  const preorder = normalizePreorderInput(req.body);
+  if (preorder.error) return err(res, 400, preorder.error, 'validation_error');
+
+  const allergenResult = parseAndValidateAllergens(req.body.allergens);
+  if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+
+  const safeName = sanitizeText(name);
+  const safeDescription = sanitizeText(description || '');
+  const safeUnit = sanitizeText(unit || 'unit');
+  const safeCategory = sanitizeText(category || 'other');
+
+  const safeImageUrl =
+    image_url && /^\/uploads\/[a-f0-9]+\.(jpg|jpeg|png|webp)$/i.test(image_url)
+      ? image_url
+      : null;
+
+  const result = db.prepare(
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, is_preorder, preorder_delivery_date, low_stock_threshold, nutrition, allergens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    req.user.id,
+    safeName,
+    safeDescription,
+    safeCategory,
+    price,
+    quantity,
+    safeUnit,
+    safeImageUrl,
+    preorder.isPreorder ? 1 : 0,
+    preorder.preorderDeliveryDate,
+    parseInt(req.body.low_stock_threshold, 10) || 5,
+    nutrition ? JSON.stringify(nutrition) : null,
+    allergenResult.allergens,
+  );
+
+  res.json({ success: true, id: result.lastInsertRowid, message: 'Product listed' });
+});
+
+// PATCH /api/products/:id - farmer updates own product
+router.patch('/:id', auth, (req, res) => {
+  if (req.user.role !== 'farmer') return err(res, 403, 'Only farmers can edit products', 'forbidden');
+
+  const product = db.prepare('SELECT * FROM products WHERE id = ? AND farmer_id = ?').get(req.params.id, req.user.id);
+  if (!product) return err(res, 404, 'Not found or not yours', 'not_found');
+
+  const allowed = [
+    'name',
+    'description',
+    'price',
+    'quantity',
+    'unit',
+    'category',
+    'low_stock_threshold',
+    'is_preorder',
+    'preorder_delivery_date',
+    'nutrition',
+    'allergens',
+  ];
+
+// POST /api/products
 router.post('/', auth, validate.product, async (req, res) => {
   if (req.user.role !== 'farmer') return err(res, 403, 'Only farmers can list products', 'forbidden');
 
@@ -202,6 +518,14 @@ router.post('/', auth, validate.product, async (req, res) => {
 
   const preorder = normalizePreorderInput(req.body);
   if (preorder.error) return err(res, 400, preorder.error, 'validation_error');
+  const allergenResult = parseAndValidateAllergens(req.body.allergens);
+  if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+
+  const safeName        = sanitizeText(name);
+  const safeDescription = sanitizeText(description || '');
+  const safeUnit        = sanitizeText(unit || 'unit');
+  const safeCategory    = sanitizeText(category || 'other');
+  const safeImageUrl    = image_url && /^\/uploads\/[a-f0-9]+\.(jpg|jpeg|png|webp)$/i.test(image_url) ? image_url : null;
 
   const model = pricing_model || 'fixed';
   const minPrice = model === 'pwyw' ? parseFloat(req.body.min_price) : null;
@@ -224,6 +548,10 @@ router.post('/', auth, validate.product, async (req, res) => {
     ]
   );
 
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight, allergens) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id',
+    [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight, allergenResult.allergens]
+  );
+  await cache.del('products:{}');
   res.json({ success: true, id: rows[0].id, message: 'Product listed' });
 });
 
@@ -238,6 +566,8 @@ router.patch('/:id', auth, async (req, res) => {
     'low_stock_threshold', 'nutrition', 'pricing_model', 'min_price', 
     'pricing_type', 'is_preorder', 'preorder_delivery_date'
   ];
+  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'carbon_kg_per_unit'];
+  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'nutrition', 'pricing_type', 'min_weight', 'max_weight', 'allergens'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -255,11 +585,74 @@ router.patch('/:id', auth, async (req, res) => {
   }
   if (updates.pricing_model === 'pwyw' && updates.min_price === undefined && existing[0].min_price === null) {
     return err(res, 400, 'Minimum price is required for PWYW', 'validation_error');
+
+  if (updates.low_stock_threshold !== undefined) {
+    updates.low_stock_threshold = parseInt(updates.low_stock_threshold, 10);
+    if (Number.isNaN(updates.low_stock_threshold) || updates.low_stock_threshold < 0) {
+      return err(res, 400, 'Threshold must be non-negative', 'validation_error');
+    }
+  }
+
+  if (updates.nutrition !== undefined) {
+    updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.allergens !== undefined) {
+    const allergenResult = parseAndValidateAllergens(updates.allergens);
+    if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+    updates.allergens = allergenResult.allergens;
+  }
+
+  if (updates.grade !== undefined) {
+    const VALID_GRADES = ['A', 'B', 'C', 'Ungraded'];
+    if (!VALID_GRADES.includes(updates.grade)) {
+      return err(res, 400, 'grade must be A, B, C, or Ungraded', 'validation_error');
+    }
+  }
+
+  const nextIsPreorder = updates.is_preorder !== undefined
+    ? (updates.is_preorder === true || updates.is_preorder === 1 || updates.is_preorder === '1')
+    : !!product.is_preorder;
+
+  const nextDeliveryDate = updates.preorder_delivery_date !== undefined
+    ? (updates.preorder_delivery_date ? String(updates.preorder_delivery_date).trim() : null)
+    : product.preorder_delivery_date;
+
+  if (nextIsPreorder) {
+    if (!nextDeliveryDate || !/^\d{4}-\d{2}-\d{2}$/.test(nextDeliveryDate)) {
+      return err(res, 400, 'preorder_delivery_date must be provided as YYYY-MM-DD for pre-order products', 'validation_error');
+    }
+    updates.is_preorder = 1;
+    updates.preorder_delivery_date = nextDeliveryDate;
+  } else {
+    updates.is_preorder = 0;
+    updates.preorder_delivery_date = null;
   }
 
   const keys = Object.keys(updates);
   if (keys.length === 0) return res.json({ success: true, message: 'No changes' });
 
+  const setClauses = Object.keys(updates).map((k) => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE products SET ${setClauses} WHERE id = ?`).run(...Object.values(updates), req.params.id);
+    if (isNaN(updates.low_stock_threshold) || updates.low_stock_threshold < 0) return err(res, 400, 'Threshold must be non-negative', 'validation_error');
+  }
+
+  const newQty       = updates.quantity ?? product.quantity;
+  const newThreshold = updates.low_stock_threshold ?? product.low_stock_threshold ?? 5;
+  if (newQty > newThreshold) updates.low_stock_alerted = 0;
+
+  if (updates.nutrition !== undefined) {
+    updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.allergens !== undefined) {
+    const allergenResult = parseAndValidateAllergens(updates.allergens);
+    if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+    updates.allergens = allergenResult.allergens;
+  }
+
+  const keys   = Object.keys(updates);
+  const values = Object.values(updates);
   const setClauses = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
   await db.query(`UPDATE products SET ${setClauses} WHERE id = $${keys.length + 1}`, [...Object.values(updates), req.params.id]);
 
@@ -293,6 +686,44 @@ router.patch('/:id/restock', auth, async (req, res) => {
   }
 
   res.json({ success: true, message: 'Restocked' });
+});
+
+/**
+ * @swagger
+ * /api/products/{id}:
+ *   delete:
+ *     summary: Delete a product listing (farmer only)
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Product deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *       404:
+ *         description: Not found or not yours
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+// DELETE /api/products/:id
+router.delete('/:id', auth, async (req, res) => {
+  const { rows } = await db.query('SELECT * FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
+  if (!rows[0]) return err(res, 404, 'Not found or not yours', 'not_found');
+  await db.query('DELETE FROM products WHERE id = $1', [req.params.id]);
+  await cache.del('products:{}');
+  res.json({ success: true, message: 'Deleted' });
 });
 
 module.exports = router;

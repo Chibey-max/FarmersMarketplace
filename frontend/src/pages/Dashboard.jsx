@@ -31,6 +31,7 @@ const EMPTY_FORM = {
   min_price: '',
   is_preorder: false,
   preorder_delivery_date: '',
+  allergens: [],
   nutrition: {
     calories: '',
     protein: '',
@@ -368,6 +369,7 @@ export default function Dashboard() {
         pricing_type: form.pricing_type || 'unit',
         min_weight: form.pricing_type === 'weight' ? parseFloat(form.min_weight) : undefined,
         max_weight: form.pricing_type === 'weight' ? parseFloat(form.max_weight) : undefined,
+        allergens: form.allergens && form.allergens.length > 0 ? form.allergens : undefined,
       });
       setMsg({ type: 'ok', text: t('dashboard.productListedOk') });
       setForm(EMPTY_FORM);
@@ -465,10 +467,10 @@ export default function Dashboard() {
           <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
           {msg && <div style={{ ...s.msg, background: msg.type === 'ok' ? '#d8f3dc' : '#fee', color: msg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>{msg.text}</div>}
           <form onSubmit={handleAdd}>
-            {[['name', 'Product Name'], ['price', 'Price (XLM)'], ['quantity', 'Quantity'], ['unit', 'Unit (kg, bunch, etc.)']].map(([key, label]) => (
+            {[['name', 'Product Name', 'prod-name'], ['price', 'Price (XLM)', 'prod-price'], ['quantity', 'Quantity', 'prod-qty'], ['unit', 'Unit (kg, bunch, etc.)', 'prod-unit']].map(([key, label, id]) => (
               <div key={key}>
-                <label style={s.label}>{label}</label>
-                <input style={s.input} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} required={key !== 'unit'} />
+                <label style={s.label} htmlFor={id}>{label}</label>
+                <input id={id} style={s.input} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} required={key !== 'unit'} />
               </div>
             ))}
             <label style={s.label}>Description</label>
@@ -511,6 +513,40 @@ export default function Dashboard() {
             <button style={{ ...s.btn, width: '100%', marginTop: 8 }} type="submit" disabled={uploading}>
               {uploading ? t('dashboard.uploading') : t('dashboard.listProduct')}
             </button>
+
+            {/* Allergen selector */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={s.label}>Allergens <span style={{ color: '#aaa', fontWeight: 400 }}>(select all that apply)</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {['gluten', 'nuts', 'dairy', 'eggs', 'soy', 'shellfish'].map(a => {
+                  const selected = (form.allergens || []).includes(a);
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      style={{
+                        padding: '5px 10px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
+                        border: selected ? '1px solid #c0392b' : '1px solid #ddd',
+                        background: selected ? '#fee' : '#fff',
+                        color: selected ? '#c0392b' : '#555',
+                        fontWeight: selected ? 700 : 400,
+                      }}
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        allergens: selected
+                          ? (f.allergens || []).filter(x => x !== a)
+                          : [...(f.allergens || []), a],
+                      }))}
+                      aria-pressed={selected}
+                    >
+                      {selected ? '✕ ' : ''}{a.charAt(0).toUpperCase() + a.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button style={s.btn} type="submit">List Product</button>
 
             <details style={{ marginTop: 16 }}>
               <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#2d6a4f', marginBottom: 8 }}>
@@ -716,6 +752,12 @@ export default function Dashboard() {
           <h3 style={{ marginBottom: 16, color: '#333' }}>My Listings ({products.length})</h3>
           {products.length === 0 && <p style={{ color: '#888', fontSize: 14 }}>No products yet. Add your first listing.</p>}
           {products.map(p => (
+            <div key={p.id} style={s.product}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: '#666' }}>{p.price} XLM · {p.quantity} {p.unit}</div>
+              </div>
+              <button style={s.del} onClick={() => handleDelete(p.id)} aria-label={`Remove ${p.name}`}>Remove</button>
             <div key={p.id} style={{ ...s.product, flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -782,7 +824,7 @@ export default function Dashboard() {
                     onChange={e => setRestockVals({ ...restockVals, [p.id]: e.target.value })}
                   />
                   <button style={{ ...s.btn, padding: '4px 10px', fontSize: 12, background: '#218c74' }} onClick={() => handleRestock(p.id)}>{t('dashboard.restock')}</button>
-                  <button style={s.del} onClick={() => handleDelete(p.id)}>{t('dashboard.remove')}</button>
+                  <button style={s.del} onClick={() => handleDelete(p.id)} aria-label={`Remove ${p.name}`}>{t('dashboard.remove')}</button>
                 </div>
               </div>
 
