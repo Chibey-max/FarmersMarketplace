@@ -3,8 +3,6 @@ const rateLimit = require("express-rate-limit");
 const logger = require("../logger");
 const db = require("../db/schema");
 const { Server } = require("@stellar/stellar-sdk");
-const router = require('express').Router();
-const rateLimit = require('express-rate-limit');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

@@ -74,6 +74,12 @@ jest.mock('../src/utils/mailer', () => ({
   sendBackInStockEmail: jest.fn().mockResolvedValue({}),
 }));
 
+// --- requestLogger mock (uuid v13 is ESM-only, incompatible with Jest CJS) ---
+jest.mock('../src/middleware/requestLogger', () => (req, res, next) => {
+  req.requestId = 'test-request-id';
+  next();
+});
+
 // Reset all mocks before each test to prevent queue leakage
 beforeEach(() => {
   jest.resetAllMocks();

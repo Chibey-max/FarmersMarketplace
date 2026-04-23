@@ -93,7 +93,14 @@ module.exports = {
 
   order: validate(z.object({
     product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
-    quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
+    quantity: z.coerce
+      .number()
+      .int()
+      .positive('quantity must be a positive integer')
+      .max(
+        parseInt(process.env.MAX_ORDER_QUANTITY, 10) || 10000,
+        `quantity cannot exceed ${parseInt(process.env.MAX_ORDER_QUANTITY, 10) || 10000}`
+      ),
     address_id: z.coerce.number().int().positive().optional(),
     use_soroban_escrow: z.coerce.boolean().optional(),
     weight: z.coerce.number().positive('weight must be a positive number').optional(),
@@ -147,7 +154,14 @@ module.exports = {
   order: validate(
     z.object({
       product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
-      quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
+      quantity: z.coerce
+        .number()
+        .int()
+        .positive('quantity must be a positive integer')
+        .max(
+          parseInt(process.env.MAX_ORDER_QUANTITY, 10) || 10000,
+          `quantity cannot exceed ${parseInt(process.env.MAX_ORDER_QUANTITY, 10) || 10000}`
+        ),
       address_id: z.coerce.number().int().positive().optional(),
       use_soroban_escrow: z.coerce.boolean().optional(),
       weight: z.coerce.number().positive('weight must be a positive number').optional(),
