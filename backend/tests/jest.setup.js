@@ -95,7 +95,7 @@ beforeEach(() => {
   const stellar = jest.requireMock('../src/utils/stellar');
   stellar.createWallet.mockReturnValue({ publicKey: 'GPUBKEY', secretKey: 'SSECRET' });
   stellar.getBalance.mockResolvedValue(1000);
-  stellar.getTransactions.mockResolvedValue([]);
+  stellar.getTransactions.mockResolvedValue({ records: [], next_cursor: null, prev_cursor: null });
   stellar.fundTestnetAccount.mockResolvedValue({});
   stellar.sendPayment.mockResolvedValue('TXHASH123');
   stellar.isTestnet = true;
