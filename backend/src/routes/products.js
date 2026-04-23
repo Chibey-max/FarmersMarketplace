@@ -818,12 +818,6 @@ router.patch('/:id', auth, async (req, res) => {
   res.json({ success: true, message: 'Product updated' });
 });
 
-router.delete('/:id', auth, async (req, res) => {
-  const { rowCount } = await db.query('DELETE FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
-  if (rowCount === 0) return err(res, 404, 'Not found or not yours', 'not_found');
-  res.json({ success: true, message: 'Deleted' });
-});
-
 router.get('/:id/images', async (req, res) => {
   const { rows } = await db.query('SELECT * FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC, id ASC', [req.params.id]);
   res.json({ success: true, data: rows });
@@ -875,11 +869,35 @@ router.patch('/:id/restock', auth, async (req, res) => {
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: Conflict - product has open or paid orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 error: { type: string }
+ *                 code: { type: string }
+ *                 openOrders: { type: array }
  */
 // DELETE /api/products/:id
 router.delete('/:id', auth, async (req, res) => {
-  const { rows } = await db.query('SELECT * FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
-  if (!rows[0]) return err(res, 404, 'Not found or not yours', 'not_found');
+  const { rows: productRows } = await db.query('SELECT * FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
+  if (!productRows[0]) return err(res, 404, 'Not found or not yours', 'not_found');
+
+  // Check for open or paid orders
+  const { rows: orderRows } = await db.query(
+    `SELECT id, status FROM orders WHERE product_id = $1 AND status IN ('pending', 'paid', 'disputed')`,
+    [req.params.id]
+  );
+
+  if (orderRows.length > 0) {
+    return err(res, 409, 'Cannot delete product with open or paid orders', 'conflict', {
+      openOrders: orderRows.map(o => ({ id: o.id, status: o.status })),
+    });
+  }
+
   await db.query('DELETE FROM products WHERE id = $1', [req.params.id]);
   await cache.del('products:{}');
   res.json({ success: true, message: 'Deleted' });
