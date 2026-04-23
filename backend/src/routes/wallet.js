@@ -4,7 +4,6 @@ const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const cache = require('../cache');
-const validate = require("../middleware/validate");
 const {
   isTestnet,
   getBalance,
@@ -15,8 +14,6 @@ const {
   addTrustline,
   removeTrustline,
   mergeAccount,
-} = require("../utils/stellar");
-const { err } = require("../middleware/error");
   lookupFederationAddress,
 } = require('../utils/stellar');
 const { err } = require('../middleware/error');
@@ -60,38 +57,19 @@ function availableAfterReserve(balance) {
  *                 referralCode: { type: string }
  */
 router.get('/', auth, async (req, res) => {
-  try {
-    const { rows } = await db.query(
-      'SELECT stellar_public_key, referral_code FROM users WHERE id = $1',
-      [req.user.id]
-    );
-    const user = rows[0];
-    if (!user) return err(res, 404, 'User not found', 'user_not_found');
   const cacheKey = `wallet:${req.user.id}`;
   const cached = await cache.get(cacheKey);
   if (cached) return res.json(cached);
 
   const { rows } = await db.query('SELECT stellar_public_key, referral_code FROM users WHERE id = $1', [req.user.id]);
   const user = rows[0];
-  if (!user) return err(res, 404, "User not found", "user_not_found");
+  if (!user) return err(res, 404, 'User not found', 'user_not_found');
 
-    const [balance, balances] = await Promise.all([
-      getBalance(user.stellar_public_key),
-      getAllBalances(user.stellar_public_key),
-    ]);
+  const [balance, balances] = await Promise.all([
+    getBalance(user.stellar_public_key),
+    getAllBalances(user.stellar_public_key),
+  ]);
 
-    res.json({
-      success: true,
-      publicKey: user.stellar_public_key,
-      balance,
-      availableBalance: availableAfterReserve(balance),
-      baseReserve: BASE_RESERVE_XLM,
-      balances,
-      referralCode: user.referral_code,
-    });
-  } catch (e) {
-    return err(res, 500, e.message, 'wallet_error');
-  }
   const payload = {
     success: true,
     publicKey: user.stellar_public_key,
@@ -205,21 +183,6 @@ router.post('/send', auth, validate.sendXLM, async (req, res) => {
       });
     }
 
-// POST /api/wallet/fund
-router.post('/fund', auth, async (req, res) => {
-  if (!stellar.isTestnet) return err(res, 400, 'Only available on testnet', 'testnet_only');
-  const { rows } = await db.query('SELECT stellar_public_key FROM users WHERE id = $1', [req.user.id]);
-  if (!rows[0]) return err(res, 404, 'User not found', 'user_not_found');
-  try {
-    await fundTestnetAccount(rows[0].stellar_public_key);
-    await cache.del(`wallet:${req.user.id}`);
-    const balance = await getBalance(rows[0].stellar_public_key);
-    return res.json({ success: true, message: 'Account funded with 10,000 XLM (testnet)', balance });
-  } catch (e) {
-    return err(res, 500, e.message || 'Failed to fund account', 'fund_failed');
-  }
-});
-  try {
     const txHash = await sendPayment({
       senderSecret: user.stellar_secret_key,
       receiverPublicKey: destination,
@@ -227,19 +190,10 @@ router.post('/fund', auth, async (req, res) => {
       memo: memo || '',
     });
 
-    return res.json({
-      success: true,
-      txHash,
-      amount,
-      destination,
-      memo: memo || null,
-    });
+    return res.json({ success: true, txHash, amount, destination, memo: memo || null });
   } catch (e) {
     const stellarMsg = e?.response?.data?.extras?.result_codes?.operations?.[0] || e.message;
-    return res.status(502).json({
-      success: false,
-      error: `Stellar transaction failed: ${stellarMsg}`,
-    });
+    return res.status(502).json({ success: false, error: `Stellar transaction failed: ${stellarMsg}` });
   }
 });
 

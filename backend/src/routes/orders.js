@@ -14,8 +14,6 @@ const {
   claimBalance,
   mintRewardTokens,
   invokeEscrowContract,
-  pathPayment,
-  getPathPaymentEstimate,
   generatePaymentLink,
 } = require('../utils/stellar');
 const {
@@ -117,7 +115,6 @@ router.post('/', auth, validate.order, async (req, res) => {
   const { allowed: geoAllowed } = await checkGeoFence(product, buyer, clientIp);
   if (!geoAllowed) return err(res, 403, 'Not available in your region', 'region_restricted');
 
-  const weight = req.body.weight ? parseFloat(req.body.weight) : null;
   if (product.pricing_type === 'weight') {
     if (!weight || isNaN(weight) || weight <= 0) return err(res, 400, 'weight is required for weight-based products', 'validation_error');
     if (weight < product.min_weight) return err(res, 400, `weight must be at least ${product.min_weight} ${product.unit}`, 'validation_error');
@@ -134,32 +131,7 @@ router.post('/', auth, validate.order, async (req, res) => {
     'SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = $1',
     [req.user.id]
   );
-  const buyer = bRows[0];
 
-  const subtotal = (isFlashSaleActive(product) ? Number(product.flash_sale_price) : Number(product.price)) * quantity;
-  const subtotal = product.pricing_type === 'weight'
-    ? product.price * weight
-    : product.price * quantity;
-  let subtotal;
-  if (product.pricing_type === 'weight') {
-    subtotal = Number(product.price) * weight;
-  } else {
-    const unitPrice = await getEffectiveUnitPrice(product, product_id, quantity);
-    subtotal = unitPrice * quantity;
-  }
-  let discount = 0;
-  let appliedCoupon = null;
-  if (coupon_code) {
-    const { rows: cRows } = await db.query(
-      `SELECT * FROM coupons WHERE code = $1 AND farmer_id = $2 AND (expires_at IS NULL OR expires_at > NOW()) AND (max_uses IS NULL OR used_count < max_uses)`,
-      [coupon_code.trim().toUpperCase(), product.farmer_id]
-    );
-    if (!cRows[0]) return err(res, 400, 'Invalid or expired coupon', 'invalid_coupon');
-    appliedCoupon = cRows[0];
-    discount = appliedCoupon.discount_type === 'percent'
-      ? parseFloat((subtotal * appliedCoupon.discount_value / 100).toFixed(7))
-      : Math.min(parseFloat(appliedCoupon.discount_value), subtotal);
-  }
   // 2. Validate Pricing & Calculate Total
   let unitPrice = 0;
   if (product.pricing_model === 'pwyw') {
@@ -240,11 +212,10 @@ router.post('/', auth, validate.order, async (req, res) => {
   const usePathPayment = source_asset && source_asset.code && source_asset.code !== 'XLM';
   if (!usePathPayment) {
     const balance = await getBalance(buyer.stellar_public_key);
-    if (balance < totalPrice + 0.00001) return res.status(402).json({ success: false, message: 'Insufficient balance', code: 'insufficient_balance' });
-  const balance = await getBalance(buyer.stellar_public_key);
-  const required = totalPrice + 0.00001;
-  if (balance < required) {
-    return res.status(402).json({ success: false, message: 'Insufficient XLM balance', code: 'insufficient_balance' });
+    const required = totalPrice + 0.00001;
+    if (balance < required) {
+      return res.status(402).json({ success: false, message: 'Insufficient XLM balance', code: 'insufficient_balance' });
+    }
   }
 
   // 4. Atomic Stock Check & Initial Order Save
@@ -255,9 +226,6 @@ router.post('/', auth, validate.order, async (req, res) => {
     `INSERT INTO orders (buyer_id, product_id, quantity, total_price, custom_price, status, address_id) 
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
     [req.user.id, product_id, quantity, totalPrice, custom_price || null, 'pending', address_id || null]
-  const { rows: oRows } = await db.query(
-    'INSERT INTO orders (buyer_id, product_id, quantity, total_price, status, address_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-    [req.user.id, product_id, quantity, totalPrice, 'pending', address_id || null]
   );
   const orderId = orderRows[0].id;
 
@@ -349,15 +317,9 @@ router.post('/', auth, validate.order, async (req, res) => {
         memo: `Order#${orderId}`
       });
       await db.query('UPDATE orders SET status = $1, stellar_tx_hash = $2 WHERE id = $3', ['paid', txHash, orderId]);
-      await db.query('UPDATE orders SET status=$1, stellar_tx_hash=$2 WHERE id=$3', ['paid', txHash, orderId]);
 
     } else {
       txHash = await sendPayment({ senderSecret: buyer.stellar_secret_key, receiverPublicKey: product.farmer_wallet, amount: totalPrice, memo: `Order#${orderId}` });
-      await db.query('UPDATE orders SET status=$1, stellar_tx_hash=$2 WHERE id=$3', ['paid', txHash, orderId]);
-      txHash = await invokeEscrowContract({
-        action: 'deposit', senderSecret: buyer.stellar_secret_key, orderId, buyerPublicKey: buyer.stellar_public_key, farmerPublicKey: product.farmer_wallet, amount: totalPrice,
-        timeoutUnix: Math.floor(Date.now()/1000) + timeoutDays * 86400
-      });
       await db.query('UPDATE orders SET status = $1, stellar_tx_hash = $2 WHERE id = $3', ['paid', txHash, orderId]);
     }
 
@@ -366,14 +328,6 @@ router.post('/', auth, validate.order, async (req, res) => {
       [product.farmer_id],
     );
     const farmer = farmerRows[0];
-      balanceId = `soroban:${orderId}`;
-    } else {
-      txHash = await sendPayment({ senderSecret: buyer.stellar_secret_key, receiverPublicKey: product.farmer_wallet, amount: totalPrice, memo: `Order#${orderId}` });
-    }
-
-    // 6. Post-Payment Actions
-    const { rows: fRows } = await db.query('SELECT * FROM users WHERE id = $1', [product.farmer_id]);
-    const farmer = fRows[0];
 
     // Referral bonus (one-time)
     if (buyer.referred_by && buyer.referral_bonus_sent === 0) {
