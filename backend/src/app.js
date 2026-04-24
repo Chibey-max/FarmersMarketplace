@@ -25,6 +25,13 @@ const requestLogger = require('./middleware/requestLogger');
 
 const app = express();
 
+// Configure proxy trust based on environment
+// In production, set TRUST_PROXY to the number of proxies or 'true' for all
+const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? 1 : false);
+if (trustProxy) {
+  app.set('trust proxy', trustProxy);
+}
+
 app.use(requestLogger);
 app.use(enforceHttps);
 app.use(hsts);
@@ -52,6 +59,7 @@ app.use(helmet({
 }));
 
 const corsOrigins = process.env.CORS_ORIGIN || process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const allowedOrigins = corsOrigins.split(',').map(o => o.trim());
 const corsOrigins =
   process.env.CORS_ORIGIN || process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const allowedOrigins = corsOrigins.split(',').map((o) => o.trim());
